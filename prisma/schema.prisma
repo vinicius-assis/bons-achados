@@ -42,9 +42,19 @@ model Product {
   @@unique([marketplace, productId])
 }
 
-model MercadoLivreAuth {
+model MercadoLivreSession {
   id           Int      @id @default(1)
-  accessToken  String
-  refreshToken String
+  cookieHeader String
+  csrfToken    String
   updatedAt    DateTime @updatedAt
+}
+
+model MercadoLivreGeneratedLink {
+  id            String   @id @default(cuid())
+  mlItemId      String
+  title         String
+  affiliateLink String
+  generatedAt   DateTime @default(now())
+
+  @@index([mlItemId, generatedAt])
 }
