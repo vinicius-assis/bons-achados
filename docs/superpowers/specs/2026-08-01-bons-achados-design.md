@@ -32,10 +32,12 @@ Todas passam pelo mesmo pipeline (filtro → IA → score) antes de ficarem "apr
 
 A arquitetura é desacoplada por design: os três produtores de dados só escrevem em `Products` via API routes; trocar/adicionar fonte de dados não exige mexer no pipeline. Vercel (functions) e Neon (Postgres serverless) escalam por configuração/plano, não por redesenho. Serviços externos (IA, agendamento) são plugáveis por HTTP.
 
-Dois limites conhecidos, sem ação necessária agora:
+Dois limites conhecidos:
 
 - **Prisma + Neon**: usar o connection pooler do Neon (`pgbouncer`) desde o início para evitar esgotamento de conexões sob carga.
-- **Tempo de execução de função serverless na Vercel** (10s no plano gratuito): se o volume de coleta do ML crescer muito, a rota `/api/collect` migra para um worker separado fora da Vercel. Como a lógica já está isolada numa API route, a migração é localizada.
+- **Tempo de execução de função serverless na Vercel** (10s no plano gratuito): ação necessária já na primeira versão, não só se o volume crescer — com os parâmetros padrão (3 queries × até 50 resultados cada, uma chamada de avaliação por item) a rota `/api/collect` já se aproxima do limite num único ciclo. A implementação limita resultados por busca (`limit=20`) e declara `maxDuration = 60` na rota para dar folga. Se o volume crescer ainda mais, a rota migra para um worker separado fora da Vercel — como a lógica já está isolada numa API route, essa migração é localizada.
+
+**Nota sobre o cálculo de minutos do GitHub Actions**: a estimativa de "~144 execuções/dia dentro do limite gratuito" só vale para repositório **público** — GitHub Actions é ilimitado em repositórios públicos, mas em repositório privado 144 execuções/dia × 30 dias arredondadas para cima por minuto ultrapassam facilmente as 2000 minutos/mês gratuitas. Manter o repositório público, ou aumentar o intervalo do cron, caso vire privado. Vale lembrar também que o GitHub desativa workflows agendados automaticamente após 60 dias de inatividade do repositório.
 
 ## Agendamento da coleta
 

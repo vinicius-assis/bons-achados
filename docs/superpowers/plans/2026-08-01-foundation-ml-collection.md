@@ -6,7 +6,7 @@
 
 **Architecture:** A Next.js (App Router, TypeScript) project with a Prisma-backed `Product` table on Neon Postgres. A `MercadoLivreClient` calls Mercado Livre's public search and reviews endpoints; a mapper converts raw API results into the shared `ProductInput` shape; a collector orchestrates search+mapping across a configurable list of queries; an authenticated `/api/collect` route runs the collector and upserts results. A GitHub Actions cron workflow triggers that route every 10 minutes.
 
-**Tech Stack:** Next.js 15 (App Router, TypeScript), Prisma ORM, PostgreSQL (Neon, with connection pooler), Vitest for tests, GitHub Actions for scheduling.
+**Tech Stack:** Next.js 16 (App Router, TypeScript) — `create-next-app@latest` installs 16.x today, not 15 as originally planned; nothing in this plan depends on 15-specific behavior, Prisma ORM, PostgreSQL (Neon, with connection pooler), Vitest for tests, GitHub Actions for scheduling.
 
 ## Global Constraints
 
