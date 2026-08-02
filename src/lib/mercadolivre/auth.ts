@@ -19,6 +19,7 @@ export async function refreshAccessToken(): Promise<string> {
       client_secret: process.env.ML_CLIENT_SECRET!,
       refresh_token: stored.refreshToken,
     }),
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!response.ok) {
@@ -27,10 +28,23 @@ export async function refreshAccessToken(): Promise<string> {
 
   const data = await response.json();
 
-  await prisma.mercadoLivreAuth.update({
-    where: { id: 1 },
+  if (
+    typeof data.access_token !== "string" ||
+    !data.access_token ||
+    typeof data.refresh_token !== "string" ||
+    !data.refresh_token
+  ) {
+    throw new Error("Mercado Livre token response missing access_token or refresh_token");
+  }
+
+  const result = await prisma.mercadoLivreAuth.updateMany({
+    where: { id: 1, refreshToken: stored.refreshToken },
     data: { accessToken: data.access_token, refreshToken: data.refresh_token },
   });
+
+  if (result.count === 0) {
+    throw new Error("Mercado Livre token was rotated concurrently, retry");
+  }
 
   return data.access_token as string;
 }
