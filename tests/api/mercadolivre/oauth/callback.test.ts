@@ -25,7 +25,7 @@ describe("GET /api/mercadolivre/oauth/callback", () => {
     global.fetch = vi.fn();
     const request = requestWithCookies(
       "http://localhost/api/mercadolivre/oauth/callback?code=abc&state=wrong",
-      "ml_oauth_state=expected; ml_oauth_verifier=verifier123"
+      "ml_oauth_state=expected; ml_oauth_verifier=verifier123; ml_oauth_authorized=1"
     );
 
     const response = await GET(request);
@@ -36,13 +36,45 @@ describe("GET /api/mercadolivre/oauth/callback", () => {
 
   it("rejects when there is no state cookie at all", async () => {
     global.fetch = vi.fn();
-    const request = new NextRequest(
-      "http://localhost/api/mercadolivre/oauth/callback?code=abc&state=expected"
+    const request = requestWithCookies(
+      "http://localhost/api/mercadolivre/oauth/callback?code=abc&state=expected",
+      "ml_oauth_authorized=1"
     );
 
     const response = await GET(request);
 
     expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects when the ml_oauth_authorized cookie is missing", async () => {
+    global.fetch = vi.fn();
+    const request = requestWithCookies(
+      "http://localhost/api/mercadolivre/oauth/callback?code=abc&state=expected",
+      "ml_oauth_state=expected; ml_oauth_verifier=verifier123"
+    );
+
+    const response = await GET(request);
+
+    expect(response.status).toBe(401);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects with a distinct error when Mercado Livre reports authorization denial", async () => {
+    global.fetch = vi.fn();
+    const request = requestWithCookies(
+      "http://localhost/api/mercadolivre/oauth/callback?error=access_denied",
+      "ml_oauth_state=expected; ml_oauth_verifier=verifier123; ml_oauth_authorized=1"
+    );
+
+    const response = await GET(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({
+      error: "Mercado Livre authorization was denied or failed",
+      detail: "access_denied",
+    });
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
@@ -53,7 +85,7 @@ describe("GET /api/mercadolivre/oauth/callback", () => {
     } as Response);
     const request = requestWithCookies(
       "http://localhost/api/mercadolivre/oauth/callback?code=auth-code&state=expected",
-      "ml_oauth_state=expected; ml_oauth_verifier=verifier123"
+      "ml_oauth_state=expected; ml_oauth_verifier=verifier123; ml_oauth_authorized=1"
     );
 
     const response = await GET(request);
@@ -74,7 +106,23 @@ describe("GET /api/mercadolivre/oauth/callback", () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 400 } as Response);
     const request = requestWithCookies(
       "http://localhost/api/mercadolivre/oauth/callback?code=auth-code&state=expected",
-      "ml_oauth_state=expected; ml_oauth_verifier=verifier123"
+      "ml_oauth_state=expected; ml_oauth_verifier=verifier123; ml_oauth_authorized=1"
+    );
+
+    const response = await GET(request);
+
+    expect(response.status).toBe(502);
+    expect(prisma.mercadoLivreAuth.upsert).not.toHaveBeenCalled();
+  });
+
+  it("returns 502 when the token response is missing access_token or refresh_token", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: "new-access" }),
+    } as Response);
+    const request = requestWithCookies(
+      "http://localhost/api/mercadolivre/oauth/callback?code=auth-code&state=expected",
+      "ml_oauth_state=expected; ml_oauth_verifier=verifier123; ml_oauth_authorized=1"
     );
 
     const response = await GET(request);
