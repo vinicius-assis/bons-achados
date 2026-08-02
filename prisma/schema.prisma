@@ -41,3 +41,10 @@ model Product {
 
   @@unique([marketplace, productId])
 }
+
+model MercadoLivreAuth {
+  id           Int      @id @default(1)
+  accessToken  String
+  refreshToken String
+  updatedAt    DateTime @updatedAt
+}
