@@ -1,0 +1,15 @@
+name: Collect Mercado Livre deals
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger collection endpoint
+        run: |
+          curl -sSf -X POST "${{ secrets.COLLECT_URL }}" \
+            -H "x-collect-secret: ${{ secrets.COLLECT_SECRET }}"
