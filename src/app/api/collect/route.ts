@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { collectMercadoLivreDeals } from "@/lib/mercadolivre/collect";
 import { upsertProducts } from "@/lib/products/upsert";
 
+export const maxDuration = 60;
+
 const DEFAULT_SEARCH_QUERIES = [
   "eletronicos em oferta",
   "casa em oferta",

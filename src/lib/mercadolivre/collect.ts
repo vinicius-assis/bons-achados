@@ -8,10 +8,14 @@ export async function collectMercadoLivreDeals(
 ): Promise<ProductInput[]> {
   const products: ProductInput[] = [];
   for (const query of queries) {
-    const items = await client.searchProducts(query);
-    for (const item of items) {
-      const reviews = await client.getItemReviews(item.id);
-      products.push(mapToProductInput(item, reviews));
+    try {
+      const items = await client.searchProducts(query);
+      for (const item of items) {
+        const reviews = await client.getItemReviews(item.id);
+        products.push(mapToProductInput(item, reviews));
+      }
+    } catch (error) {
+      console.error(`Mercado Livre collection failed for query "${query}":`, error);
     }
   }
   return products;

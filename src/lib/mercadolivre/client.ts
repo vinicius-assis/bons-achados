@@ -19,13 +19,13 @@ export type MLReviews = {
 
 export class MercadoLivreClient {
   async searchProducts(query: string): Promise<MLSearchItem[]> {
-    const url = `${ML_API_BASE}/sites/MLB/search?q=${encodeURIComponent(query)}`;
+    const url = `${ML_API_BASE}/sites/MLB/search?q=${encodeURIComponent(query)}&limit=20`;
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`Mercado Livre search failed: ${response.status}`);
     }
     const data = await response.json();
-    return data.results as MLSearchItem[];
+    return Array.isArray(data.results) ? (data.results as MLSearchItem[]) : [];
   }
 
   async getItemReviews(itemId: string): Promise<MLReviews> {

@@ -30,8 +30,20 @@ describe("MercadoLivreClient", () => {
 
     expect(results).toEqual(mockResults);
     expect(global.fetch).toHaveBeenCalledWith(
-      "https://api.mercadolibre.com/sites/MLB/search?q=echo%20dot"
+      "https://api.mercadolibre.com/sites/MLB/search?q=echo%20dot&limit=20"
     );
+  });
+
+  it("searchProducts returns an empty array when the response has no results array", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    } as Response);
+
+    const client = new MercadoLivreClient();
+    const results = await client.searchProducts("echo dot");
+
+    expect(results).toEqual([]);
   });
 
   it("searchProducts throws when the API responds with an error status", async () => {

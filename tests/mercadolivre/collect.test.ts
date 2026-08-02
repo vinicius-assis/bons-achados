@@ -41,4 +41,34 @@ describe("collectMercadoLivreDeals", () => {
     const result = await collectMercadoLivreDeals([], client);
     expect(result).toEqual([]);
   });
+
+  it("skips a failing query and still returns results from the others", async () => {
+    process.env.ML_AFFILIATE_WORD = "bonsachados";
+    process.env.ML_AFFILIATE_TOOL = "12345";
+
+    const client = new MercadoLivreClient();
+    client.searchProducts = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Mercado Livre search failed: 500"))
+      .mockResolvedValueOnce([
+        {
+          id: "MLB2",
+          title: "Fire TV Stick",
+          price: 199,
+          original_price: 349,
+          thumbnail: "http://img2",
+          permalink: "http://item2",
+          category_id: "MLB1000",
+          seller: { nickname: "Loja" },
+          sold_quantity: 300,
+        },
+      ]);
+    client.getItemReviews = vi.fn().mockResolvedValue({ rating_average: 4.5, total: 1000 });
+
+    const result = await collectMercadoLivreDeals(["broken query", "fire tv"], client);
+
+    expect(client.searchProducts).toHaveBeenCalledTimes(2);
+    expect(result).toHaveLength(1);
+    expect(result[0].productId).toBe("MLB2");
+  });
 });
