@@ -1,0 +1,43 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Marketplace {
+  MERCADO_LIVRE
+  AMAZON
+  SHOPEE
+}
+
+enum ProductSource {
+  AUTO
+  MANUAL
+}
+
+model Product {
+  id            String        @id @default(cuid())
+  marketplace   Marketplace
+  source        ProductSource
+  productId     String
+  title         String
+  description   String?
+  price         Float
+  oldPrice      Float?
+  discount      Float?
+  rating        Float?
+  reviews       Int?
+  image         String
+  affiliateLink String
+  category      String?
+  seller        String?
+  createdAt     DateTime      @default(now())
+  posted        Boolean       @default(false)
+  score         Float?
+
+  @@unique([marketplace, productId])
+}
