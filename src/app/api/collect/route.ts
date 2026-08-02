@@ -32,10 +32,19 @@ export async function POST(request: NextRequest) {
   try {
     const accessToken = await refreshAccessToken();
     const client = new MercadoLivreClient(accessToken);
-    const products = await collectMercadoLivreDeals(getSearchQueries(), client);
+    const queries = getSearchQueries();
+    const { products, failedQueries } = await collectMercadoLivreDeals(queries, client);
+
+    if (failedQueries === queries.length && queries.length > 0) {
+      return NextResponse.json(
+        { error: "All Mercado Livre queries failed", failedQueries },
+        { status: 500 }
+      );
+    }
+
     const count = await upsertProducts(products);
 
-    return NextResponse.json({ collected: count });
+    return NextResponse.json({ collected: count, failedQueries });
   } catch (error) {
     console.error("Mercado Livre collect failed:", error);
     return NextResponse.json({ error: "Collection failed" }, { status: 500 });

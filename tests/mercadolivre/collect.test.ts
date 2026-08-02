@@ -32,14 +32,16 @@ describe("collectMercadoLivreDeals", () => {
 
     expect(client.searchProducts).toHaveBeenCalledWith("echo dot");
     expect(client.getItemReviews).toHaveBeenCalledWith("MLB1");
-    expect(result).toHaveLength(1);
-    expect(result[0].productId).toBe("MLB1");
+    expect(result.products).toHaveLength(1);
+    expect(result.products[0].productId).toBe("MLB1");
+    expect(result.failedQueries).toBe(0);
   });
 
   it("returns an empty array when no queries are given", async () => {
     const client = new MercadoLivreClient("test-token");
     const result = await collectMercadoLivreDeals([], client);
-    expect(result).toEqual([]);
+    expect(result.products).toEqual([]);
+    expect(result.failedQueries).toBe(0);
   });
 
   it("skips a failing query and still returns results from the others", async () => {
@@ -68,7 +70,18 @@ describe("collectMercadoLivreDeals", () => {
     const result = await collectMercadoLivreDeals(["broken query", "fire tv"], client);
 
     expect(client.searchProducts).toHaveBeenCalledTimes(2);
-    expect(result).toHaveLength(1);
-    expect(result[0].productId).toBe("MLB2");
+    expect(result.products).toHaveLength(1);
+    expect(result.products[0].productId).toBe("MLB2");
+    expect(result.failedQueries).toBe(1);
+  });
+
+  it("reports every query as failed when all queries fail", async () => {
+    const client = new MercadoLivreClient("test-token");
+    client.searchProducts = vi.fn().mockRejectedValue(new Error("Mercado Livre search failed: 500"));
+
+    const result = await collectMercadoLivreDeals(["a", "b"], client);
+
+    expect(result.products).toEqual([]);
+    expect(result.failedQueries).toBe(2);
   });
 });

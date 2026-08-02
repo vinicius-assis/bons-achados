@@ -1,11 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { NextRequest } from "next/server";
+import type { ProductInput } from "@/lib/products/types";
 
 vi.mock("@/lib/mercadolivre/auth", () => ({
   refreshAccessToken: vi.fn().mockResolvedValue("test-token"),
 }));
 vi.mock("@/lib/mercadolivre/collect", () => ({
-  collectMercadoLivreDeals: vi.fn().mockResolvedValue([{ productId: "MLB1" }]),
+  collectMercadoLivreDeals: vi
+    .fn()
+    .mockResolvedValue({ products: [{ productId: "MLB1" }], failedQueries: 0 }),
 }));
 vi.mock("@/lib/products/upsert", () => ({
   upsertProducts: vi.fn().mockResolvedValue(1),
@@ -39,7 +42,7 @@ describe("POST /api/collect", () => {
 
     expect(refreshAccessToken).toHaveBeenCalled();
     expect(response.status).toBe(200);
-    expect(body).toEqual({ collected: 1 });
+    expect(body).toEqual({ collected: 1, failedQueries: 0 });
   });
 
   it("returns 500 when the token refresh fails", async () => {
@@ -52,5 +55,39 @@ describe("POST /api/collect", () => {
     const response = await POST(request);
 
     expect(response.status).toBe(500);
+  });
+
+  it("returns 500 when every Mercado Livre query fails", async () => {
+    vi.mocked(collectMercadoLivreDeals).mockResolvedValueOnce({
+      products: [],
+      failedQueries: 3,
+    });
+
+    const request = new NextRequest("http://localhost/api/collect", {
+      method: "POST",
+      headers: { "x-collect-secret": "test-secret" },
+    });
+    const response = await POST(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body).toEqual({ error: "All Mercado Livre queries failed", failedQueries: 3 });
+  });
+
+  it("returns 200 with failedQueries when only some queries fail", async () => {
+    vi.mocked(collectMercadoLivreDeals).mockResolvedValueOnce({
+      products: [{ productId: "MLB1" } as ProductInput],
+      failedQueries: 1,
+    });
+
+    const request = new NextRequest("http://localhost/api/collect", {
+      method: "POST",
+      headers: { "x-collect-secret": "test-secret" },
+    });
+    const response = await POST(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ collected: 1, failedQueries: 1 });
   });
 });
