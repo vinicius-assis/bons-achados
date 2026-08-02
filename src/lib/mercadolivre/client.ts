@@ -18,9 +18,15 @@ export type MLReviews = {
 };
 
 export class MercadoLivreClient {
+  constructor(private readonly accessToken: string) {}
+
+  private authHeaders(): { Authorization: string } {
+    return { Authorization: `Bearer ${this.accessToken}` };
+  }
+
   async searchProducts(query: string): Promise<MLSearchItem[]> {
     const url = `${ML_API_BASE}/sites/MLB/search?q=${encodeURIComponent(query)}&limit=20`;
-    const response = await fetch(url);
+    const response = await fetch(url, { headers: this.authHeaders() });
     if (!response.ok) {
       throw new Error(`Mercado Livre search failed: ${response.status}`);
     }
@@ -30,7 +36,7 @@ export class MercadoLivreClient {
 
   async getItemReviews(itemId: string): Promise<MLReviews> {
     const url = `${ML_API_BASE}/reviews/item/${itemId}`;
-    const response = await fetch(url);
+    const response = await fetch(url, { headers: this.authHeaders() });
     if (!response.ok) {
       return { rating_average: 0, total: 0 };
     }
