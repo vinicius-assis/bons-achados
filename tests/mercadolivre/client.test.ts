@@ -6,7 +6,7 @@ describe("MercadoLivreClient", () => {
     vi.restoreAllMocks();
   });
 
-  it("searchProducts returns parsed results", async () => {
+  it("searchProducts sends the access token as a Bearer header and returns parsed results", async () => {
     const mockResults = [
       {
         id: "MLB1",
@@ -25,12 +25,13 @@ describe("MercadoLivreClient", () => {
       json: async () => ({ results: mockResults }),
     } as Response);
 
-    const client = new MercadoLivreClient();
+    const client = new MercadoLivreClient("test-token");
     const results = await client.searchProducts("echo dot");
 
     expect(results).toEqual(mockResults);
     expect(global.fetch).toHaveBeenCalledWith(
-      "https://api.mercadolibre.com/sites/MLB/search?q=echo%20dot&limit=20"
+      "https://api.mercadolibre.com/sites/MLB/search?q=echo%20dot&limit=20",
+      { headers: { Authorization: "Bearer test-token" } }
     );
   });
 
@@ -40,7 +41,7 @@ describe("MercadoLivreClient", () => {
       json: async () => ({}),
     } as Response);
 
-    const client = new MercadoLivreClient();
+    const client = new MercadoLivreClient("test-token");
     const results = await client.searchProducts("echo dot");
 
     expect(results).toEqual([]);
@@ -49,29 +50,33 @@ describe("MercadoLivreClient", () => {
   it("searchProducts throws when the API responds with an error status", async () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500 } as Response);
 
-    const client = new MercadoLivreClient();
+    const client = new MercadoLivreClient("test-token");
 
     await expect(client.searchProducts("echo dot")).rejects.toThrow(
       "Mercado Livre search failed: 500"
     );
   });
 
-  it("getItemReviews returns rating and total", async () => {
+  it("getItemReviews sends the access token as a Bearer header and returns rating and total", async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ rating_average: 4.8, paging: { total: 24000 } }),
     } as Response);
 
-    const client = new MercadoLivreClient();
+    const client = new MercadoLivreClient("test-token");
     const reviews = await client.getItemReviews("MLB1");
 
     expect(reviews).toEqual({ rating_average: 4.8, total: 24000 });
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://api.mercadolibre.com/reviews/item/MLB1",
+      { headers: { Authorization: "Bearer test-token" } }
+    );
   });
 
   it("getItemReviews returns zeros when the request fails", async () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 404 } as Response);
 
-    const client = new MercadoLivreClient();
+    const client = new MercadoLivreClient("test-token");
     const reviews = await client.getItemReviews("MLB1");
 
     expect(reviews).toEqual({ rating_average: 0, total: 0 });
