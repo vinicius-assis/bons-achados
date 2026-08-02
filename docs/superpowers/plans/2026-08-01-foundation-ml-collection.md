@@ -159,8 +159,10 @@ git commit -m "chore: scaffold Next.js project with Vitest test harness"
 
 - [ ] **Step 1: Install Prisma**
 
+Pin to Prisma 6.x — Prisma 7 changed the schema format (`url`/`directUrl` are no longer accepted inside `datasource` blocks, and requires a separate `prisma.config.ts`), which breaks the schema and client code below.
+
 ```bash
-npm install prisma @prisma/client
+npm install prisma@6.19.3 @prisma/client@6.19.3
 npx prisma init --datasource-provider postgresql
 ```
 
