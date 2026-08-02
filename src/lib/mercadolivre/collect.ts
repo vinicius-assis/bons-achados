@@ -4,7 +4,7 @@ import type { ProductInput } from "@/lib/products/types";
 
 export async function collectMercadoLivreDeals(
   queries: string[],
-  client: MercadoLivreClient = new MercadoLivreClient()
+  client: MercadoLivreClient
 ): Promise<ProductInput[]> {
   const products: ProductInput[] = [];
   for (const query of queries) {

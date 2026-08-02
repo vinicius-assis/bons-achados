@@ -12,7 +12,7 @@ describe("collectMercadoLivreDeals", () => {
     process.env.ML_AFFILIATE_WORD = "bonsachados";
     process.env.ML_AFFILIATE_TOOL = "12345";
 
-    const client = new MercadoLivreClient();
+    const client = new MercadoLivreClient("test-token");
     client.searchProducts = vi.fn().mockResolvedValue([
       {
         id: "MLB1",
@@ -37,7 +37,7 @@ describe("collectMercadoLivreDeals", () => {
   });
 
   it("returns an empty array when no queries are given", async () => {
-    const client = new MercadoLivreClient();
+    const client = new MercadoLivreClient("test-token");
     const result = await collectMercadoLivreDeals([], client);
     expect(result).toEqual([]);
   });
@@ -46,7 +46,7 @@ describe("collectMercadoLivreDeals", () => {
     process.env.ML_AFFILIATE_WORD = "bonsachados";
     process.env.ML_AFFILIATE_TOOL = "12345";
 
-    const client = new MercadoLivreClient();
+    const client = new MercadoLivreClient("test-token");
     client.searchProducts = vi
       .fn()
       .mockRejectedValueOnce(new Error("Mercado Livre search failed: 500"))
