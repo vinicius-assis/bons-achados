@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { parseDiscountPercentage } from "@/lib/mercadolivre/discountLabel";
 
 type MLHubItem = {
   itemId: string;
@@ -68,6 +69,8 @@ export default function MercadoLivreAdmin() {
   const [generatingItemId, setGeneratingItemId] = useState<string | null>(null);
   const [generatedLinks, setGeneratedLinks] = useState<Record<string, string>>({});
   const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
+  const [selectingItemId, setSelectingItemId] = useState<string | null>(null);
+  const [selectedForPost, setSelectedForPost] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetch("/api/admin/mercadolivre/session")
@@ -222,6 +225,44 @@ export default function MercadoLivreAdmin() {
       setSearchError(`Não deu para gerar o link de "${item.title}". Tente de novo.`);
     } finally {
       setGeneratingItemId(null);
+    }
+  }
+
+  async function handleSelectForPost(item: MLHubItem, affiliateLink: string) {
+    setSelectingItemId(item.itemId);
+    setSearchError(null);
+    try {
+      const response = await fetch("/api/admin/postdraft", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          marketplace: "MERCADO_LIVRE",
+          source: "AUTO",
+          title: item.title,
+          affiliateLink,
+          image: item.image,
+          price: item.price,
+          discount: parseDiscountPercentage(item.discountLabel),
+          category: null,
+        }),
+      });
+      if (response.status === 401) {
+        expireSession();
+        return;
+      }
+      if (response.status === 409) {
+        setSelectedForPost((previous) => ({ ...previous, [item.itemId]: true }));
+        return;
+      }
+      if (!response.ok) {
+        setSearchError(`Não deu para selecionar "${item.title}" para postar. Tente de novo.`);
+        return;
+      }
+      setSelectedForPost((previous) => ({ ...previous, [item.itemId]: true }));
+    } catch {
+      setSearchError(`Não deu para selecionar "${item.title}" para postar. Tente de novo.`);
+    } finally {
+      setSelectingItemId(null);
     }
   }
 
@@ -517,6 +558,20 @@ export default function MercadoLivreAdmin() {
                             className="w-full rounded-full bg-ink px-4 py-2.5 font-display font-stretch-condensed text-xs font-black tracking-wide text-gold uppercase italic transition hover:bg-gold hover:text-ink focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-paper focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-transparent disabled:text-ash disabled:ring-1 disabled:ring-ink/15 disabled:hover:bg-transparent disabled:hover:text-ash"
                           >
                             {isGenerating ? "Gerando…" : "Gerar link"}
+                          </button>
+                        )}
+                        {generatedLink && (
+                          <button
+                            type="button"
+                            onClick={() => handleSelectForPost(item, generatedLink)}
+                            disabled={selectingItemId === item.itemId || selectedForPost[item.itemId]}
+                            className="mt-2 w-full rounded-full border border-gold/40 px-4 py-2 font-mono text-[10px] tracking-wider text-gold uppercase transition hover:bg-gold hover:text-ink focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {selectedForPost[item.itemId]
+                              ? "Selecionado ✓"
+                              : selectingItemId === item.itemId
+                                ? "Selecionando…"
+                                : "Selecionar para postar"}
                           </button>
                         )}
                       </div>
