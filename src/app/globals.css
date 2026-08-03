@@ -10,6 +10,44 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Brand palette, taken from the Bons Achados sticker mark */
+  --color-ink: #121212;
+  --color-ink-raised: #1c1b19;
+  --color-ink-line: #2e2c28;
+  --color-gold: #f5b921;
+  --color-gold-deep: #c98f0b;
+  --color-paper: #fbfaf7;
+  --color-ash: #8a857c;
+  --color-alert: #d93a2b;
+
+  --font-display: var(--font-archivo);
+  --font-body: var(--font-archivo);
+}
+
+@theme {
+  --animate-sticker-in: sticker-in 420ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+
+  @keyframes sticker-in {
+    from {
+      opacity: 0;
+      transform: translateY(12px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 @media (prefers-color-scheme: dark) {
