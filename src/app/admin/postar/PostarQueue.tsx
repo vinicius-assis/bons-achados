@@ -22,6 +22,7 @@ export default function PostarQueue() {
   const [error, setError] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -75,6 +76,16 @@ export default function PostarQueue() {
     }
   }
 
+  async function handleCopyLink(itemId: string, link: string) {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopiedItemId(itemId);
+      window.setTimeout(() => setCopiedItemId(null), 2000);
+    } catch {
+      setError("O navegador bloqueou a cópia. Selecione o link e copie na mão.");
+    }
+  }
+
   if (loading) {
     return <p className="text-sm text-ash">Carregando a fila…</p>;
   }
@@ -116,6 +127,24 @@ export default function PostarQueue() {
               {formatPrice(item.price)}
               {item.discount ? ` · ${item.discount}% OFF` : ""}
             </p>
+            <div className="mt-2 rounded-xl border border-ink-line bg-ink p-2">
+              <div className="flex items-center gap-2">
+                <input
+                  readOnly
+                  aria-label={`Link de afiliado de ${item.title}`}
+                  value={item.affiliateLink}
+                  onFocus={(event) => event.currentTarget.select()}
+                  className="min-w-0 flex-1 bg-transparent font-mono text-[11px] text-paper focus-visible:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleCopyLink(item.id, item.affiliateLink)}
+                  className="shrink-0 rounded-full bg-ink-raised px-3 py-1.5 font-mono text-[10px] tracking-wider text-gold uppercase transition hover:bg-ink focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none"
+                >
+                  {copiedItemId === item.id ? "Copiado" : "Copiar"}
+                </button>
+              </div>
+            </div>
             <div className="mt-3 grid grid-cols-2 gap-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
