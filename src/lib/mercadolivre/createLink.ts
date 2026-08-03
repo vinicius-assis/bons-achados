@@ -25,6 +25,7 @@ export async function createAffiliateLink(
       "x-csrf-token": session.csrfToken,
     },
     body: JSON.stringify({ urls: [url], tag: process.env.ML_AFFILIATE_WORD ?? "" }),
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (response.status === 401 || response.status === 403) {

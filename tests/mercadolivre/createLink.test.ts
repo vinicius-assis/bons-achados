@@ -76,6 +76,31 @@ describe("createAffiliateLink", () => {
       createAffiliateLink("https://www.mercadolivre.com.br/produto/p/MLB1", session)
     ).rejects.toThrow("Mercado Livre createLink response missing short_url/long_url");
   });
+
+  it("throws a generic error on other non-ok statuses", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500 } as Response);
+
+    await expect(
+      createAffiliateLink("https://www.mercadolivre.com.br/produto/p/MLB1", session)
+    ).rejects.toThrow("Mercado Livre createLink failed: 500");
+  });
+
+  it("passes an abort signal with a timeout to fetch", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        urls: [{ short_url: "https://meli.la/abc123", long_url: "https://www.mercadolivre.com.br/social/..." }],
+      }),
+    } as Response);
+
+    await createAffiliateLink("https://www.mercadolivre.com.br/produto/p/MLB1", session);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    );
+  });
 });
 
 describe("recordGeneratedLink", () => {
