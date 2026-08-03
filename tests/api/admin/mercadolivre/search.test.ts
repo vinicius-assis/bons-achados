@@ -35,10 +35,13 @@ const item = {
   commissionLabel: null,
 };
 
-function buildRequest(query = "creatina") {
-  return new NextRequest(`http://localhost/api/admin/mercadolivre/search?q=${query}`, {
-    headers: AUTH_HEADER,
-  });
+function buildRequest(query = "creatina", offset?: number) {
+  const url = new URL("http://localhost/api/admin/mercadolivre/search");
+  url.searchParams.set("q", query);
+  if (offset !== undefined) {
+    url.searchParams.set("offset", String(offset));
+  }
+  return new NextRequest(url, { headers: AUTH_HEADER });
 }
 
 describe("GET /api/admin/mercadolivre/search", () => {
@@ -85,9 +88,36 @@ describe("GET /api/admin/mercadolivre/search", () => {
     const response = await GET(request);
     const body = await response.json();
 
-    expect(searchAffiliateProducts).toHaveBeenCalledWith("creatina", { cookieHeader: "a=b", csrfToken: "t" });
+    expect(searchAffiliateProducts).toHaveBeenCalledWith("creatina", { cookieHeader: "a=b", csrfToken: "t" }, 0);
     expect(findGeneratedTodayMap).toHaveBeenCalledWith(["MLB123"]);
     expect(body).toEqual({ items: [{ ...item, generatedLink: "https://meli.la/abc" }] });
+  });
+
+  it("passes the offset query param through to searchAffiliateProducts for pagination", async () => {
+    vi.mocked(getSession).mockResolvedValue({ cookieHeader: "a=b", csrfToken: "t" });
+    vi.mocked(searchAffiliateProducts).mockResolvedValue([item]);
+    const request = buildRequest("creatina", 30);
+
+    await GET(request);
+
+    expect(searchAffiliateProducts).toHaveBeenCalledWith(
+      "creatina",
+      { cookieHeader: "a=b", csrfToken: "t" },
+      30
+    );
+  });
+
+  it("defaults to offset 0 when the offset param is missing, negative, or invalid", async () => {
+    vi.mocked(getSession).mockResolvedValue({ cookieHeader: "a=b", csrfToken: "t" });
+    vi.mocked(searchAffiliateProducts).mockResolvedValue([item]);
+
+    await GET(buildRequest("creatina", -5));
+
+    expect(searchAffiliateProducts).toHaveBeenCalledWith(
+      "creatina",
+      { cookieHeader: "a=b", csrfToken: "t" },
+      0
+    );
   });
 
   it("returns generatedLink: null when the item was not generated today", async () => {

@@ -96,7 +96,8 @@ function parseCard(card: any): MLHubItem | null {
 
 export async function searchAffiliateProducts(
   query: string,
-  session: MLHubSession
+  session: MLHubSession,
+  offset: number = 0
 ): Promise<MLHubItem[]> {
   const response = await fetch(HUB_SEARCH_URL, {
     method: "POST",
@@ -112,7 +113,7 @@ export async function searchAffiliateProducts(
       search: query,
       sort: "relevance",
       filters: [{ id: "best_seller", value: true }],
-      offset: 0,
+      offset,
     }),
     signal: AbortSignal.timeout(10_000),
   });

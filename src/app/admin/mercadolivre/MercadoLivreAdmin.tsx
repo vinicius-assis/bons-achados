@@ -21,6 +21,10 @@ function formatPrice(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+// Mercado Livre's hub doesn't return a total count or a "has more" flag —
+// a page shorter than this is treated as the last one.
+const PAGE_SIZE = 30;
+
 /**
  * The commission chip is drawn as the price tag from the logo mark: a notched
  * point on the left, a punched hole, slapped on at a slight angle.
@@ -58,6 +62,8 @@ export default function MercadoLivreAdmin() {
   const [items, setItems] = useState<MLHubItem[]>([]);
   const [searched, setSearched] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
   const [generatingItemId, setGeneratingItemId] = useState<string | null>(null);
@@ -105,39 +111,68 @@ export default function MercadoLivreAdmin() {
     }
   }
 
+  function mergeGeneratedLinks(fetchedItems: MLHubItem[]) {
+    setGeneratedLinks((previous) => {
+      const next = { ...previous };
+      for (const fetchedItem of fetchedItems) {
+        if (fetchedItem.generatedLink) {
+          next[fetchedItem.itemId] = fetchedItem.generatedLink;
+        }
+      }
+      return next;
+    });
+  }
+
+  async function fetchPage(offset: number): Promise<MLHubItem[] | null> {
+    const response = await fetch(
+      `/api/admin/mercadolivre/search?q=${encodeURIComponent(query)}&offset=${offset}`
+    );
+    if (response.status === 401) {
+      expireSession();
+      return null;
+    }
+    const body = await response.json();
+    if (!response.ok) {
+      throw new Error("search_failed");
+    }
+    return Array.isArray(body.items) ? body.items : [];
+  }
+
   async function handleSearch(event: React.FormEvent) {
     event.preventDefault();
     setSearching(true);
     setSearchError(null);
     try {
-      const response = await fetch(
-        `/api/admin/mercadolivre/search?q=${encodeURIComponent(query)}`
-      );
-      if (response.status === 401) {
-        expireSession();
+      const fetchedItems = await fetchPage(0);
+      if (fetchedItems === null) {
         return;
       }
-      const body = await response.json();
-      if (!response.ok) {
-        setSearchError("A busca falhou. Tente de novo em alguns segundos.");
-        return;
-      }
-      const fetchedItems: MLHubItem[] = Array.isArray(body.items) ? body.items : [];
       setItems(fetchedItems);
-      setGeneratedLinks((previous) => {
-        const next = { ...previous };
-        for (const fetchedItem of fetchedItems) {
-          if (fetchedItem.generatedLink) {
-            next[fetchedItem.itemId] = fetchedItem.generatedLink;
-          }
-        }
-        return next;
-      });
+      mergeGeneratedLinks(fetchedItems);
+      setHasMore(fetchedItems.length >= PAGE_SIZE);
       setSearched(true);
     } catch {
       setSearchError("A busca falhou. Tente de novo em alguns segundos.");
     } finally {
       setSearching(false);
+    }
+  }
+
+  async function handleLoadMore() {
+    setLoadingMore(true);
+    setSearchError(null);
+    try {
+      const fetchedItems = await fetchPage(items.length);
+      if (fetchedItems === null) {
+        return;
+      }
+      setItems((previous) => [...previous, ...fetchedItems]);
+      mergeGeneratedLinks(fetchedItems);
+      setHasMore(fetchedItems.length >= PAGE_SIZE);
+    } catch {
+      setSearchError("Não deu para carregar mais produtos. Tente de novo em alguns segundos.");
+    } finally {
+      setLoadingMore(false);
     }
   }
 
@@ -487,6 +522,19 @@ export default function MercadoLivreAdmin() {
                 );
               })}
             </div>
+
+            {hasMore && (
+              <div className="mt-8 flex justify-center">
+                <button
+                  type="button"
+                  onClick={handleLoadMore}
+                  disabled={loadingMore}
+                  className="rounded-full border border-ink-line bg-ink-raised px-7 py-2.5 font-display font-stretch-condensed text-sm font-black tracking-wide text-paper uppercase italic transition hover:border-gold hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-ink focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {loadingMore ? "Carregando…" : "Carregar mais"}
+                </button>
+              </div>
+            )}
           </>
         )}
       </main>

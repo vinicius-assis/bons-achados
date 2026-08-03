@@ -73,6 +73,28 @@ describe("searchAffiliateProducts", () => {
     vi.restoreAllMocks();
   });
 
+  it("sends the given offset for pagination instead of defaulting to 0", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => FIXTURE_RESPONSE,
+    } as Response);
+
+    await searchAffiliateProducts("creatina", session, 30);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://www.mercadolivre.com.br/affiliate-program/api/hub/search?is_affiliate=true&device=desktop",
+      expect.objectContaining({
+        body: JSON.stringify({
+          search: "creatina",
+          sort: "relevance",
+          filters: [{ id: "best_seller", value: true }],
+          offset: 30,
+        }),
+      })
+    );
+  });
+
   it("sends the query, cookies, and csrf token, and returns parsed items", async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,

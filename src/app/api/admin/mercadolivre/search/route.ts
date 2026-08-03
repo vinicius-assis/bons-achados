@@ -10,6 +10,8 @@ export async function GET(request: NextRequest) {
   }
 
   const query = request.nextUrl.searchParams.get("q") ?? "";
+  const rawOffset = Number(request.nextUrl.searchParams.get("offset"));
+  const offset = Number.isFinite(rawOffset) && rawOffset > 0 ? rawOffset : 0;
 
   const session = await getSession();
   if (!session) {
@@ -17,7 +19,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const items = await searchAffiliateProducts(query, session);
+    const items = await searchAffiliateProducts(query, session, offset);
     const generatedTodayMap = await findGeneratedTodayMap(items.map((item) => item.itemId));
     const annotated = items.map((item) => ({
       ...item,
