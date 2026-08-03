@@ -1,6 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 76, "column": 0}, "map": {"version":3,"sources":["file:///home/vinicius/estudos/bons-achados/src/proxy.ts"],"sourcesContent":["import { NextResponse } from \"next/server\";\nimport type { NextRequest } from \"next/server\";\nimport { isAuthorizedAdminRequest } from \"@/lib/adminAuth\";\n\nconst UNAUTHORIZED_RESPONSE = () =>\n  new NextResponse(\"Authentication required\", {\n    status: 401,\n    headers: { \"WWW-Authenticate\": 'Basic realm=\"Admin\"' },\n  });\n\nexport function proxy(request: NextRequest) {\n  if (!isAuthorizedAdminRequest(request)) {\n    return UNAUTHORIZED_RESPONSE();\n  }\n\n  return NextResponse.next();\n}\n\nexport const config = {\n  matcher: [\"/admin/:path*\", \"/api/admin/:path*\"],\n};\n"],"names":["UNAUTHORIZED_RESPONSE","status","headers","proxy","request","isAuthorizedAdminRequest","next","config","matcher"],"mappings":";;;;;;AAAA;;;;;;;;AAIA,MAAMA,wBAAwB,IAC5B,IAAI,8IAAY,CAAC,2BAA2B;QAC1CC,QAAQ;QACRC,SAAS;YAAE,oBAAoB;QAAsB;IACvD;AAEK,SAASC,MAAMC,OAAoB;IACxC,IAAI,CAACC,yBAAyBD,UAAU;QACtC,OAAOJ;IACT;IAEA,OAAO,8IAAY,CAACM,IAAI;AAC1B;AAEO,MAAMC,SAAS;IACpBC,SAAS;QAAC;QAAiB;KAAoB;AACjD"}}]
-}

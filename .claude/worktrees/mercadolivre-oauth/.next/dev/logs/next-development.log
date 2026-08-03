@@ -1,5 +1,0 @@
-{"timestamp":"07:38:39.450","source":"Server","level":"LOG","message":"✓ Compiled in 16ms"}
-{"timestamp":"07:38:39.736","source":"Server","level":"ERROR","message":"Error: ENOENT: no such file or directory, scandir '/home/vinicius/estudos/bons-achados/.claude/worktrees/mercadolivre-oauth/src/app'"}
-{"timestamp":"07:38:39.740","source":"Server","level":"ERROR","message":"⨯ \"unhandledRejection:\" Error: ENOENT: no such file or directory, scandir '/home/vinicius/estudos/bons-achados/.claude/worktrees/mercadolivre-oauth/src/app'"}
-{"timestamp":"07:38:39.744","source":"Server","level":"ERROR","message":"⨯ \"unhandledRejection: \" Error: ENOENT: no such file or directory, scandir '/home/vinicius/estudos/bons-achados/.claude/worktrees/mercadolivre-oauth/src/app'"}
-{"timestamp":"08:35:27.145","source":"Server","level":"LOG","message":"✓ Compiled in 22ms"}

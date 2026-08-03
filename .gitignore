@@ -37,6 +37,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# harness-managed worktrees (not part of this repo's history)
+.claude/worktrees/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
