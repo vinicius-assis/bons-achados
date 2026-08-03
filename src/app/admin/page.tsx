@@ -119,12 +119,18 @@ export default function AdminDashboardPage() {
         </section>
       </div>
 
-      <div className="mt-8 flex justify-center sm:justify-start">
+      <div className="mt-8 flex flex-wrap justify-center gap-3 sm:justify-start">
         <Link
           href="/admin/mercadolivre"
           className="rounded-full bg-gold px-7 py-2.5 font-display font-stretch-condensed text-sm font-black tracking-wide text-ink uppercase italic transition hover:bg-paper focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-ink focus-visible:outline-none"
         >
           Ir para o Hub Mercado Livre →
+        </Link>
+        <Link
+          href="/admin/postar"
+          className="rounded-full border border-ink-line bg-ink-raised px-7 py-2.5 font-display font-stretch-condensed text-sm font-black tracking-wide text-paper uppercase italic transition hover:border-gold hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-ink focus-visible:outline-none"
+        >
+          Produtos para postar →
         </Link>
       </div>
     </div>
