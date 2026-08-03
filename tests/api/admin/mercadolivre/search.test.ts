@@ -12,13 +12,15 @@ vi.mock("@/lib/mercadolivre/hubClient", async () => {
   };
 });
 vi.mock("@/lib/mercadolivre/createLink", () => ({
-  wasGeneratedToday: vi.fn().mockResolvedValue(false),
+  findGeneratedTodayMap: vi.fn().mockResolvedValue(new Map()),
 }));
 
 import { GET } from "@/app/api/admin/mercadolivre/search/route";
 import { getSession } from "@/lib/mercadolivre/session";
 import { searchAffiliateProducts, MercadoLivreSessionExpiredError } from "@/lib/mercadolivre/hubClient";
-import { wasGeneratedToday } from "@/lib/mercadolivre/createLink";
+import { findGeneratedTodayMap } from "@/lib/mercadolivre/createLink";
+
+const AUTH_HEADER = { authorization: `Basic ${Buffer.from("admin:test-password").toString("base64")}` };
 
 const item = {
   itemId: "MLB123",
@@ -33,6 +35,12 @@ const item = {
   commissionLabel: null,
 };
 
+function buildRequest(query = "creatina") {
+  return new NextRequest(`http://localhost/api/admin/mercadolivre/search?q=${query}`, {
+    headers: AUTH_HEADER,
+  });
+}
+
 describe("GET /api/admin/mercadolivre/search", () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -40,7 +48,7 @@ describe("GET /api/admin/mercadolivre/search", () => {
 
   it("returns 401 session_expired when no session is stored", async () => {
     vi.mocked(getSession).mockResolvedValue(null);
-    const request = new NextRequest("http://localhost/api/admin/mercadolivre/search?q=creatina");
+    const request = buildRequest();
 
     const response = await GET(request);
     const body = await response.json();
@@ -50,23 +58,36 @@ describe("GET /api/admin/mercadolivre/search", () => {
     expect(searchAffiliateProducts).not.toHaveBeenCalled();
   });
 
-  it("returns items annotated with generatedToday", async () => {
+  it("returns items annotated with generatedLink from the batched map", async () => {
     vi.mocked(getSession).mockResolvedValue({ cookieHeader: "a=b", csrfToken: "t" });
     vi.mocked(searchAffiliateProducts).mockResolvedValue([item]);
-    vi.mocked(wasGeneratedToday).mockResolvedValue(true);
-    const request = new NextRequest("http://localhost/api/admin/mercadolivre/search?q=creatina");
+    vi.mocked(findGeneratedTodayMap).mockResolvedValue(new Map([["MLB123", "https://meli.la/abc"]]));
+    const request = buildRequest();
 
     const response = await GET(request);
     const body = await response.json();
 
     expect(searchAffiliateProducts).toHaveBeenCalledWith("creatina", { cookieHeader: "a=b", csrfToken: "t" });
-    expect(body).toEqual({ items: [{ ...item, generatedToday: true }] });
+    expect(findGeneratedTodayMap).toHaveBeenCalledWith(["MLB123"]);
+    expect(body).toEqual({ items: [{ ...item, generatedLink: "https://meli.la/abc" }] });
+  });
+
+  it("returns generatedLink: null when the item was not generated today", async () => {
+    vi.mocked(getSession).mockResolvedValue({ cookieHeader: "a=b", csrfToken: "t" });
+    vi.mocked(searchAffiliateProducts).mockResolvedValue([item]);
+    vi.mocked(findGeneratedTodayMap).mockResolvedValue(new Map());
+    const request = buildRequest();
+
+    const response = await GET(request);
+    const body = await response.json();
+
+    expect(body).toEqual({ items: [{ ...item, generatedLink: null }] });
   });
 
   it("returns 401 session_expired when the client throws MercadoLivreSessionExpiredError", async () => {
     vi.mocked(getSession).mockResolvedValue({ cookieHeader: "a=b", csrfToken: "t" });
     vi.mocked(searchAffiliateProducts).mockRejectedValue(new MercadoLivreSessionExpiredError());
-    const request = new NextRequest("http://localhost/api/admin/mercadolivre/search?q=creatina");
+    const request = buildRequest();
 
     const response = await GET(request);
     const body = await response.json();
@@ -78,7 +99,7 @@ describe("GET /api/admin/mercadolivre/search", () => {
   it("returns 502 on any other error", async () => {
     vi.mocked(getSession).mockResolvedValue({ cookieHeader: "a=b", csrfToken: "t" });
     vi.mocked(searchAffiliateProducts).mockRejectedValue(new Error("boom"));
-    const request = new NextRequest("http://localhost/api/admin/mercadolivre/search?q=creatina");
+    const request = buildRequest();
 
     const response = await GET(request);
 

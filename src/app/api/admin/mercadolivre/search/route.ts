@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/mercadolivre/session";
 import { searchAffiliateProducts, MercadoLivreSessionExpiredError } from "@/lib/mercadolivre/hubClient";
-import { wasGeneratedToday } from "@/lib/mercadolivre/createLink";
+import { findGeneratedTodayMap } from "@/lib/mercadolivre/createLink";
 
 export async function GET(request: NextRequest) {
   const query = request.nextUrl.searchParams.get("q") ?? "";
@@ -13,12 +13,11 @@ export async function GET(request: NextRequest) {
 
   try {
     const items = await searchAffiliateProducts(query, session);
-    const annotated = await Promise.all(
-      items.map(async (item) => ({
-        ...item,
-        generatedToday: await wasGeneratedToday(item.itemId),
-      }))
-    );
+    const generatedTodayMap = await findGeneratedTodayMap(items.map((item) => item.itemId));
+    const annotated = items.map((item) => ({
+      ...item,
+      generatedLink: generatedTodayMap.get(item.itemId) ?? null,
+    }));
     return NextResponse.json({ items: annotated });
   } catch (error) {
     if (error instanceof MercadoLivreSessionExpiredError) {

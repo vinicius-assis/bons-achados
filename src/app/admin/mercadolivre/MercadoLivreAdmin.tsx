@@ -14,7 +14,7 @@ type MLHubItem = {
   image: string;
   permalink: string;
   commissionLabel: string | null;
-  generatedToday: boolean;
+  generatedLink: string | null;
 };
 
 function formatPrice(value: number): string {
@@ -122,7 +122,17 @@ export default function MercadoLivreAdmin() {
         setSearchError("A busca falhou. Tente de novo em alguns segundos.");
         return;
       }
-      setItems(Array.isArray(body.items) ? body.items : []);
+      const fetchedItems: MLHubItem[] = Array.isArray(body.items) ? body.items : [];
+      setItems(fetchedItems);
+      setGeneratedLinks((previous) => {
+        const next = { ...previous };
+        for (const fetchedItem of fetchedItems) {
+          if (fetchedItem.generatedLink) {
+            next[fetchedItem.itemId] = fetchedItem.generatedLink;
+          }
+        }
+        return next;
+      });
       setSearched(true);
     } catch {
       setSearchError("A busca falhou. Tente de novo em alguns segundos.");
@@ -157,13 +167,6 @@ export default function MercadoLivreAdmin() {
         ...previous,
         [item.itemId]: body.affiliateLink,
       }));
-      setItems((previous) =>
-        previous.map((existing) =>
-          existing.itemId === item.itemId
-            ? { ...existing, generatedToday: true }
-            : existing
-        )
-      );
     } catch {
       setSearchError(`Não deu para gerar o link de "${item.title}". Tente de novo.`);
     } finally {
@@ -483,14 +486,10 @@ export default function MercadoLivreAdmin() {
                           <button
                             type="button"
                             onClick={() => handleGenerateLink(item)}
-                            disabled={isGenerating || item.generatedToday}
+                            disabled={isGenerating}
                             className="w-full rounded-full bg-ink px-4 py-2.5 font-display font-stretch-condensed text-xs font-black tracking-wide text-gold uppercase italic transition hover:bg-gold hover:text-ink focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-paper focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-transparent disabled:text-ash disabled:ring-1 disabled:ring-ink/15 disabled:hover:bg-transparent disabled:hover:text-ash"
                           >
-                            {item.generatedToday
-                              ? "Já gerado hoje"
-                              : isGenerating
-                                ? "Gerando…"
-                                : "Gerar link"}
+                            {isGenerating ? "Gerando…" : "Gerar link"}
                           </button>
                         )}
                       </div>

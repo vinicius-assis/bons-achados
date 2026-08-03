@@ -64,3 +64,22 @@ export async function wasGeneratedToday(mlItemId: string): Promise<boolean> {
 
   return row !== null;
 }
+
+export async function findGeneratedTodayMap(mlItemIds: string[]): Promise<Map<string, string>> {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const rows = await prisma.mercadoLivreGeneratedLink.findMany({
+    where: { mlItemId: { in: mlItemIds }, generatedAt: { gte: startOfToday } },
+    orderBy: { generatedAt: "desc" },
+    select: { mlItemId: true, affiliateLink: true },
+  });
+
+  const map = new Map<string, string>();
+  for (const row of rows) {
+    if (!map.has(row.mlItemId)) {
+      map.set(row.mlItemId, row.affiliateLink);
+    }
+  }
+  return map;
+}

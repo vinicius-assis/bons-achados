@@ -3,6 +3,7 @@ import {
   createAffiliateLink,
   recordGeneratedLink,
   wasGeneratedToday,
+  findGeneratedTodayMap,
 } from "@/lib/mercadolivre/createLink";
 import { MercadoLivreSessionExpiredError } from "@/lib/mercadolivre/hubClient";
 import { prisma } from "@/lib/prisma";
@@ -12,6 +13,7 @@ vi.mock("@/lib/prisma", () => ({
     mercadoLivreGeneratedLink: {
       create: vi.fn().mockResolvedValue({}),
       findFirst: vi.fn(),
+      findMany: vi.fn(),
     },
   },
 }));
@@ -138,5 +140,41 @@ describe("wasGeneratedToday", () => {
     vi.mocked(prisma.mercadoLivreGeneratedLink.findFirst).mockResolvedValue(null);
 
     expect(await wasGeneratedToday("MLB123")).toBe(false);
+  });
+});
+
+describe("findGeneratedTodayMap", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("issues a single batched query and maps mlItemId to affiliateLink", async () => {
+    vi.mocked(prisma.mercadoLivreGeneratedLink.findMany).mockResolvedValue([
+      { id: "1", mlItemId: "MLB1", title: "a", affiliateLink: "https://meli.la/1", generatedAt: new Date() },
+      { id: "2", mlItemId: "MLB2", title: "b", affiliateLink: "https://meli.la/2", generatedAt: new Date() },
+    ]);
+
+    const map = await findGeneratedTodayMap(["MLB1", "MLB2", "MLB3"]);
+
+    expect(prisma.mercadoLivreGeneratedLink.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.mercadoLivreGeneratedLink.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ mlItemId: { in: ["MLB1", "MLB2", "MLB3"] } }),
+      })
+    );
+    expect(map.get("MLB1")).toBe("https://meli.la/1");
+    expect(map.get("MLB2")).toBe("https://meli.la/2");
+    expect(map.has("MLB3")).toBe(false);
+  });
+
+  it("keeps only the most recent link when an item has multiple rows today", async () => {
+    vi.mocked(prisma.mercadoLivreGeneratedLink.findMany).mockResolvedValue([
+      { id: "2", mlItemId: "MLB1", title: "a", affiliateLink: "https://meli.la/newest", generatedAt: new Date() },
+      { id: "1", mlItemId: "MLB1", title: "a", affiliateLink: "https://meli.la/oldest", generatedAt: new Date() },
+    ]);
+
+    const map = await findGeneratedTodayMap(["MLB1"]);
+
+    expect(map.get("MLB1")).toBe("https://meli.la/newest");
   });
 });
