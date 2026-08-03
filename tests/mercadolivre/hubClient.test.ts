@@ -183,4 +183,43 @@ describe("searchAffiliateProducts", () => {
     await expect(searchAffiliateProducts("creatina", session)).resolves.toEqual([]);
   });
 
+  it("drops a malformed card and keeps the valid ones instead of throwing", async () => {
+    const brokenCard = {
+      metadata: { id: "MLB0000000000", url: "www.mercadolivre.com.br/broken" },
+      pictures: { pictures: [] },
+      components: [
+        { type: "title", id: "title", title: { text: "Produto Quebrado" } },
+        { type: "price", id: "price", price: {} },
+      ],
+    };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        polycard_client_model: {
+          polycards: [FIXTURE_RESPONSE.polycard_client_model.polycards[0], brokenCard],
+        },
+      }),
+    } as Response);
+
+    const items = await searchAffiliateProducts("creatina", session);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].itemId).toBe("MLB2766771378");
+  });
+
+  it("passes an abort signal with a timeout to fetch", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => FIXTURE_RESPONSE,
+    } as Response);
+
+    await searchAffiliateProducts("creatina", session);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    );
+  });
 });

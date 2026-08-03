@@ -49,45 +49,49 @@ function buildPermalink(url: string, urlParams: string | undefined): string {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function parseCard(card: any): MLHubItem | null {
-  const components: PolycardComponent[] = card.components ?? [];
-  const titleComponent = findComponent(components, "title");
-  const priceComponent = findComponent(components, "price");
-  if (!titleComponent || !priceComponent || !card.metadata?.id) {
+  try {
+    const components: PolycardComponent[] = card.components ?? [];
+    const titleComponent = findComponent(components, "title");
+    const priceComponent = findComponent(components, "price");
+    if (!titleComponent || !priceComponent || !card.metadata?.id) {
+      return null;
+    }
+
+    const reviewComponent = findComponent(components, "review_compacted");
+    const chipComponent = findComponent(components, "chip");
+
+    let rating: number | null = null;
+    let soldLabel: string | null = null;
+    if (reviewComponent) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const values: any[] = (reviewComponent as any).review_compacted?.values ?? [];
+      const ratingValue = values.find((value) => value.key === "label");
+      const soldValue = values.find((value) => value.key === "label2");
+      rating = ratingValue?.label?.text ? parseFloat(ratingValue.label.text) : null;
+      soldLabel = soldValue?.label?.text ? soldValue.label.text.replace(/^\|\s*/, "") : null;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const price = (priceComponent as any).price;
+    const pictureId = card.pictures?.pictures?.[0]?.id;
+
+    return {
+      itemId: card.metadata.id,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      title: (titleComponent as any).title.text,
+      price: price.current_price.value,
+      oldPrice: price.previous_price?.value ?? null,
+      discountLabel: price.discount_label?.text ?? null,
+      rating,
+      soldLabel,
+      image: buildImageUrl(pictureId),
+      permalink: buildPermalink(card.metadata.url, card.metadata.url_params),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      commissionLabel: (chipComponent as any)?.chip?.label?.text ?? null,
+    };
+  } catch {
     return null;
   }
-
-  const reviewComponent = findComponent(components, "review_compacted");
-  const chipComponent = findComponent(components, "chip");
-
-  let rating: number | null = null;
-  let soldLabel: string | null = null;
-  if (reviewComponent) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const values: any[] = (reviewComponent as any).review_compacted?.values ?? [];
-    const ratingValue = values.find((value) => value.key === "label");
-    const soldValue = values.find((value) => value.key === "label2");
-    rating = ratingValue?.label?.text ? parseFloat(ratingValue.label.text) : null;
-    soldLabel = soldValue?.label?.text ? soldValue.label.text.replace(/^\|\s*/, "") : null;
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const price = (priceComponent as any).price;
-  const pictureId = card.pictures?.pictures?.[0]?.id;
-
-  return {
-    itemId: card.metadata.id,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    title: (titleComponent as any).title.text,
-    price: price.current_price.value,
-    oldPrice: price.previous_price?.value ?? null,
-    discountLabel: price.discount_label?.text ?? null,
-    rating,
-    soldLabel,
-    image: buildImageUrl(pictureId),
-    permalink: buildPermalink(card.metadata.url, card.metadata.url_params),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    commissionLabel: (chipComponent as any)?.chip?.label?.text ?? null,
-  };
 }
 
 export async function searchAffiliateProducts(
@@ -110,6 +114,7 @@ export async function searchAffiliateProducts(
       filters: [{ id: "best_seller", value: true }],
       offset: 0,
     }),
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (response.status === 401 || response.status === 403) {
