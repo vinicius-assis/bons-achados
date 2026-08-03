@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Image from "next/image";
 
 type MLHubItem = {
   itemId: string;
@@ -239,41 +238,25 @@ export default function MercadoLivreAdmin() {
   const sessionFormVisible = hasSession === false || showSessionForm;
 
   return (
-    <div className="min-h-screen bg-ink font-body text-paper">
-      {/* Header: ink band with the sticker mark and a gold rule underneath */}
-      <header className="border-b border-ink-line">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-5 gap-y-4 px-6 py-7">
-          <Image
-            src="/bons-achados.png"
-            alt=""
-            width={52}
-            height={52}
-            className="shrink-0 rounded-full"
-            priority
-          />
-          <div className="min-w-0 flex-1">
-            <p className="font-mono text-[11px] tracking-[0.22em] text-ash uppercase">
-              Bons Achados · Painel interno
-            </p>
-            <h1 className="font-display font-stretch-condensed text-3xl leading-none font-black text-paper uppercase italic sm:text-4xl">
-              Hub de <span className="text-gold">afiliados</span>
-            </h1>
-          </div>
-          <div className="flex items-center gap-2 rounded-full border border-ink-line bg-ink-raised px-3 py-1.5">
-            <StatusDot active={hasSession === true} />
-            <span className="font-mono text-[11px] tracking-wider text-ash uppercase">
-              {hasSession === null
-                ? "verificando"
-                : hasSession
-                  ? "sessão ativa"
-                  : "sem sessão"}
-            </span>
-          </div>
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="font-mono text-[11px] tracking-[0.22em] text-ash uppercase">
+            Mercado Livre
+          </p>
+          <h1 className="font-display font-stretch-condensed text-3xl leading-none font-black text-paper uppercase italic sm:text-4xl">
+            Hub de <span className="text-gold">afiliados</span>
+          </h1>
         </div>
-        <div className="h-1 bg-gold" />
-      </header>
+        <div className="flex items-center gap-2 rounded-full border border-ink-line bg-ink-raised px-3 py-1.5">
+          <StatusDot active={hasSession === true} />
+          <span className="font-mono text-[11px] tracking-wider text-ash uppercase">
+            {hasSession === null ? "verificando" : hasSession ? "sessão ativa" : "sem sessão"}
+          </span>
+        </div>
+      </div>
 
-      <main className="mx-auto max-w-6xl px-6 py-10">
+      <div className="mt-8">
         {hasSession === null && (
           <p className="font-mono text-sm text-ash">Verificando a sessão do Mercado Livre…</p>
         )}
@@ -557,7 +540,7 @@ export default function MercadoLivreAdmin() {
             )}
           </>
         )}
-      </main>
+      </div>
     </div>
   );
 }
