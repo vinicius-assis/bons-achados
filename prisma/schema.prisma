@@ -58,3 +58,19 @@ model MercadoLivreGeneratedLink {
 
   @@index([mlItemId, generatedAt])
 }
+
+model PostDraft {
+  id            String        @id @default(cuid())
+  marketplace   Marketplace
+  source        ProductSource
+  title         String
+  affiliateLink String
+  image         String
+  price         Float
+  discount      Float?
+  category      String?
+  createdAt     DateTime      @default(now())
+  postedAt      DateTime?
+
+  @@index([affiliateLink, createdAt])
+}
