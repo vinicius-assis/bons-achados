@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 
 const LINKS = [
   { href: "/admin", label: "Painel" },
+  { href: "/admin/produtos/novo", label: "Cadastrar produto" },
   { href: "/admin/mercadolivre", label: "Hub Mercado Livre" },
 ];
 
