@@ -3,7 +3,8 @@ import { deleteStalePostDrafts } from "@/lib/postdraft/store";
 
 export async function POST(request: Request) {
   const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.POSTDRAFT_CLEANUP_SECRET}`) {
+  const secret = process.env.POSTDRAFT_CLEANUP_SECRET;
+  if (!secret || authHeader !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

@@ -28,6 +28,20 @@ describe("POST /api/cron/postdraft-cleanup", () => {
     expect(deleteStalePostDrafts).not.toHaveBeenCalled();
   });
 
+  it("returns 401 without deleting when the secret is unset, even if the header literally says 'Bearer undefined'", async () => {
+    delete process.env.POSTDRAFT_CLEANUP_SECRET;
+
+    const response = await POST(
+      new Request("http://localhost/api/cron/postdraft-cleanup", {
+        method: "POST",
+        headers: { authorization: "Bearer undefined" },
+      })
+    );
+
+    expect(response.status).toBe(401);
+    expect(deleteStalePostDrafts).not.toHaveBeenCalled();
+  });
+
   it("deletes stale rows and returns the count when the secret matches", async () => {
     vi.mocked(deleteStalePostDrafts).mockResolvedValue(3);
 
