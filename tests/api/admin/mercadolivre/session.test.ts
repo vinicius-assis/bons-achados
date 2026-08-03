@@ -58,6 +58,8 @@ describe("GET /api/admin/mercadolivre/session", () => {
 });
 
 describe("POST /api/admin/mercadolivre/session", () => {
+  const REAL_CURL = `curl -H 'x-csrf-token: token123' -b 'a=b; c=d'`;
+
   beforeEach(() => {
     process.env.ADMIN_USER = "admin";
     process.env.ADMIN_PASSWORD = "test-password";
@@ -72,7 +74,7 @@ describe("POST /api/admin/mercadolivre/session", () => {
   it("returns 401 without calling saveSession when Basic Auth is missing or invalid", async () => {
     const request = new NextRequest("http://localhost/api/admin/mercadolivre/session", {
       method: "POST",
-      body: JSON.stringify({ cookieHeader: "a=b", csrfToken: "token123" }),
+      body: JSON.stringify({ curlCommand: REAL_CURL }),
     });
 
     const response = await POST(request);
@@ -81,11 +83,11 @@ describe("POST /api/admin/mercadolivre/session", () => {
     expect(saveSession).not.toHaveBeenCalled();
   });
 
-  it("saves the session and returns saved: true", async () => {
+  it("parses the curl command and saves the session", async () => {
     const request = new NextRequest("http://localhost/api/admin/mercadolivre/session", {
       method: "POST",
       headers: AUTH_HEADER,
-      body: JSON.stringify({ cookieHeader: "a=b; c=d", csrfToken: "token123" }),
+      body: JSON.stringify({ curlCommand: REAL_CURL }),
     });
 
     const response = await POST(request);
@@ -95,11 +97,24 @@ describe("POST /api/admin/mercadolivre/session", () => {
     expect(body).toEqual({ saved: true });
   });
 
-  it("returns 400 when cookieHeader or csrfToken is missing", async () => {
+  it("returns 400 when curlCommand is missing", async () => {
     const request = new NextRequest("http://localhost/api/admin/mercadolivre/session", {
       method: "POST",
       headers: AUTH_HEADER,
-      body: JSON.stringify({ cookieHeader: "" }),
+      body: JSON.stringify({}),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(400);
+    expect(saveSession).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when the curl command has no Cookie or x-csrf-token header", async () => {
+    const request = new NextRequest("http://localhost/api/admin/mercadolivre/session", {
+      method: "POST",
+      headers: AUTH_HEADER,
+      body: JSON.stringify({ curlCommand: "curl https://example.com" }),
     });
 
     const response = await POST(request);

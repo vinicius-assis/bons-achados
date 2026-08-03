@@ -50,8 +50,7 @@ function StatusDot({ active }: { active: boolean }) {
 export default function MercadoLivreAdmin() {
   const [hasSession, setHasSession] = useState<boolean | null>(null);
   const [showSessionForm, setShowSessionForm] = useState(false);
-  const [cookieHeader, setCookieHeader] = useState("");
-  const [csrfToken, setCsrfToken] = useState("");
+  const [curlCommand, setCurlCommand] = useState("");
   const [savingSession, setSavingSession] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
 
@@ -87,16 +86,17 @@ export default function MercadoLivreAdmin() {
       const response = await fetch("/api/admin/mercadolivre/session", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ cookieHeader, csrfToken }),
+        body: JSON.stringify({ curlCommand }),
       });
       if (!response.ok) {
-        setSessionError("Cole o cabeçalho Cookie e o x-csrf-token completos e tente de novo.");
+        setSessionError(
+          "Não achei o Cookie e o x-csrf-token nesse curl. Confirma que copiou a requisição hub/search inteira e tenta de novo."
+        );
         return;
       }
       setHasSession(true);
       setShowSessionForm(false);
-      setCookieHeader("");
-      setCsrfToken("");
+      setCurlCommand("");
       setSearchError(null);
     } catch {
       setSessionError("Não deu para salvar a sessão. Verifique a conexão e tente de novo.");
@@ -256,12 +256,13 @@ export default function MercadoLivreAdmin() {
                   faça uma busca qualquer no hub.
                 </>,
                 <>
-                  Clique na requisição <code className="font-mono text-gold">hub/search</code> e abra{" "}
-                  <strong className="font-semibold text-paper">Request Headers</strong>.
+                  Clique com o botão direito na requisição{" "}
+                  <code className="font-mono text-gold">hub/search</code>, escolha{" "}
+                  <strong className="font-semibold text-paper">Copy → Copy as cURL</strong>.
                 </>,
                 <>
-                  Copie o valor inteiro de <code className="font-mono text-gold">Cookie</code> e de{" "}
-                  <code className="font-mono text-gold">x-csrf-token</code> para os campos abaixo.
+                  Cole o curl inteiro no campo abaixo — o painel extrai o Cookie e o x-csrf-token
+                  sozinho.
                 </>,
               ].map((step, index) => (
                 <li key={index} className="flex gap-3">
@@ -276,27 +277,15 @@ export default function MercadoLivreAdmin() {
             <form onSubmit={handleSaveSession} className="mt-7 space-y-4">
               <label className="block">
                 <span className="font-mono text-[11px] tracking-[0.18em] text-ash uppercase">
-                  Cookie
+                  Curl da requisição hub/search
                 </span>
                 <textarea
                   required
-                  value={cookieHeader}
-                  onChange={(event) => setCookieHeader(event.target.value)}
-                  placeholder="_d2id=…; orguseridp=…; ssid=…"
-                  rows={4}
+                  value={curlCommand}
+                  onChange={(event) => setCurlCommand(event.target.value)}
+                  placeholder="curl --url 'https://www.mercadolivre.com.br/affiliate-program/api/hub/search…"
+                  rows={8}
                   className="mt-2 w-full resize-y rounded-xl border border-ink-line bg-ink p-3 font-mono text-xs text-paper placeholder:text-ash/60 focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
-                />
-              </label>
-              <label className="block">
-                <span className="font-mono text-[11px] tracking-[0.18em] text-ash uppercase">
-                  x-csrf-token
-                </span>
-                <input
-                  required
-                  value={csrfToken}
-                  onChange={(event) => setCsrfToken(event.target.value)}
-                  placeholder="eyJhbGciOi…"
-                  className="mt-2 w-full rounded-xl border border-ink-line bg-ink p-3 font-mono text-xs text-paper placeholder:text-ash/60 focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
                 />
               </label>
 

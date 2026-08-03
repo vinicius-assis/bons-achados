@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, saveSession } from "@/lib/mercadolivre/session";
+import { parseCurlCommand } from "@/lib/mercadolivre/parseCurl";
 import { isAuthorizedAdminRequest } from "@/lib/adminAuth";
 
 export async function GET(request: NextRequest) {
@@ -17,16 +18,21 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { cookieHeader, csrfToken } = body;
+  const { curlCommand } = body;
 
-  if (!cookieHeader || !csrfToken) {
+  if (!curlCommand) {
+    return NextResponse.json({ error: "curlCommand is required" }, { status: 400 });
+  }
+
+  const parsed = parseCurlCommand(curlCommand);
+  if (!parsed) {
     return NextResponse.json(
-      { error: "cookieHeader and csrfToken are required" },
+      { error: "Could not find the Cookie and x-csrf-token headers in the pasted curl command" },
       { status: 400 }
     );
   }
 
-  await saveSession(cookieHeader, csrfToken);
+  await saveSession(parsed.cookieHeader, parsed.csrfToken);
 
   return NextResponse.json({ saved: true });
 }
