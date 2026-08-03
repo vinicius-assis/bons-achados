@@ -120,9 +120,14 @@ export async function searchAffiliateProducts(
   }
 
   const data = await response.json();
-  const cards = data?.polycard_client_model?.polycards;
-  if (!Array.isArray(cards)) {
+  if (data == null || typeof data !== "object" || !("polycard_client_model" in data)) {
     throw new MercadoLivreSessionExpiredError();
+  }
+
+  const cards = (data as { polycard_client_model?: { polycards?: unknown } })
+    .polycard_client_model?.polycards;
+  if (!Array.isArray(cards)) {
+    return [];
   }
 
   return cards

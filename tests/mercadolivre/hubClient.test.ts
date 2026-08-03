@@ -151,7 +151,7 @@ describe("searchAffiliateProducts", () => {
     );
   });
 
-  it("throws MercadoLivreSessionExpiredError when the response body has no polycards", async () => {
+  it("throws MercadoLivreSessionExpiredError when the response body doesn't look like ML's shape at all", async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -162,4 +162,25 @@ describe("searchAffiliateProducts", () => {
       MercadoLivreSessionExpiredError
     );
   });
+
+  it("returns an empty array when polycard_client_model is present but polycards is missing", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ polycard_client_model: {} }),
+    } as Response);
+
+    await expect(searchAffiliateProducts("creatina", session)).resolves.toEqual([]);
+  });
+
+  it("returns an empty array when polycards is an empty array", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ polycard_client_model: { polycards: [] } }),
+    } as Response);
+
+    await expect(searchAffiliateProducts("creatina", session)).resolves.toEqual([]);
+  });
+
 });

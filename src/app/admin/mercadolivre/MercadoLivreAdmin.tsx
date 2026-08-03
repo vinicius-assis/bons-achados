@@ -336,6 +336,7 @@ export default function MercadoLivreAdmin() {
               </label>
               <input
                 id="ml-query"
+                required
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="fone bluetooth, air fryer, cadeira gamer…"
