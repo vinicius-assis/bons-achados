@@ -8,8 +8,11 @@ vi.mock("@/lib/mercadolivre/session", () => ({
 
 import { GET, POST } from "@/app/api/admin/mercadolivre/session/route";
 import { getSession, saveSession } from "@/lib/mercadolivre/session";
+import { ADMIN_SESSION_COOKIE, createSessionToken } from "@/lib/adminSession";
 
-const AUTH_HEADER = { authorization: `Basic ${Buffer.from("admin:test-password").toString("base64")}` };
+function authHeader() {
+  return { cookie: `${ADMIN_SESSION_COOKIE}=${createSessionToken()}` };
+}
 
 describe("GET /api/admin/mercadolivre/session", () => {
   beforeEach(() => {
@@ -23,7 +26,7 @@ describe("GET /api/admin/mercadolivre/session", () => {
     delete process.env.ADMIN_PASSWORD;
   });
 
-  it("returns 401 without calling getSession when Basic Auth is missing or invalid", async () => {
+  it("returns 401 without calling getSession when the session cookie is missing or invalid", async () => {
     const request = new NextRequest("http://localhost/api/admin/mercadolivre/session");
 
     const response = await GET(request);
@@ -35,7 +38,7 @@ describe("GET /api/admin/mercadolivre/session", () => {
   it("returns hasSession: false when no session is stored", async () => {
     vi.mocked(getSession).mockResolvedValue(null);
     const request = new NextRequest("http://localhost/api/admin/mercadolivre/session", {
-      headers: AUTH_HEADER,
+      headers: authHeader(),
     });
 
     const response = await GET(request);
@@ -47,7 +50,7 @@ describe("GET /api/admin/mercadolivre/session", () => {
   it("returns hasSession: true when a session is stored", async () => {
     vi.mocked(getSession).mockResolvedValue({ cookieHeader: "a=b", csrfToken: "t" });
     const request = new NextRequest("http://localhost/api/admin/mercadolivre/session", {
-      headers: AUTH_HEADER,
+      headers: authHeader(),
     });
 
     const response = await GET(request);
@@ -71,7 +74,7 @@ describe("POST /api/admin/mercadolivre/session", () => {
     delete process.env.ADMIN_PASSWORD;
   });
 
-  it("returns 401 without calling saveSession when Basic Auth is missing or invalid", async () => {
+  it("returns 401 without calling saveSession when the session cookie is missing or invalid", async () => {
     const request = new NextRequest("http://localhost/api/admin/mercadolivre/session", {
       method: "POST",
       body: JSON.stringify({ curlCommand: REAL_CURL }),
@@ -86,7 +89,7 @@ describe("POST /api/admin/mercadolivre/session", () => {
   it("parses the curl command and saves the session", async () => {
     const request = new NextRequest("http://localhost/api/admin/mercadolivre/session", {
       method: "POST",
-      headers: AUTH_HEADER,
+      headers: authHeader(),
       body: JSON.stringify({ curlCommand: REAL_CURL }),
     });
 
@@ -100,7 +103,7 @@ describe("POST /api/admin/mercadolivre/session", () => {
   it("returns 400 when curlCommand is missing", async () => {
     const request = new NextRequest("http://localhost/api/admin/mercadolivre/session", {
       method: "POST",
-      headers: AUTH_HEADER,
+      headers: authHeader(),
       body: JSON.stringify({}),
     });
 
@@ -113,7 +116,7 @@ describe("POST /api/admin/mercadolivre/session", () => {
   it("returns 400 when the curl command has no Cookie or x-csrf-token header", async () => {
     const request = new NextRequest("http://localhost/api/admin/mercadolivre/session", {
       method: "POST",
-      headers: AUTH_HEADER,
+      headers: authHeader(),
       body: JSON.stringify({ curlCommand: "curl https://example.com" }),
     });
 

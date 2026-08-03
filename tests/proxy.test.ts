@@ -1,53 +1,51 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { NextRequest } from "next/server";
 import { proxy } from "@/proxy";
+import { ADMIN_SESSION_COOKIE, createSessionToken } from "@/lib/adminSession";
 
-describe("proxy (admin Basic Auth)", () => {
+describe("proxy (admin session auth)", () => {
   beforeEach(() => {
-    process.env.ADMIN_USER = "admin";
     process.env.ADMIN_PASSWORD = "test-password";
   });
 
   afterEach(() => {
-    delete process.env.ADMIN_USER;
     delete process.env.ADMIN_PASSWORD;
   });
 
-  it("rejects requests without an Authorization header", () => {
+  it("redirects /admin/* to /login when the session cookie is missing", () => {
     const request = new NextRequest("http://localhost/admin/mercadolivre");
 
     const response = proxy(request);
 
-    expect(response.status).toBe(401);
-    expect(response.headers.get("WWW-Authenticate")).toBe('Basic realm="Admin"');
+    expect(response.status).toBe(307);
+    const location = new URL(response.headers.get("location")!);
+    expect(location.pathname).toBe("/login");
+    expect(location.searchParams.get("next")).toBe("/admin/mercadolivre");
   });
 
-  it("rejects requests with the wrong password", () => {
-    const encoded = Buffer.from("admin:wrong-password").toString("base64");
-    const request = new NextRequest("http://localhost/admin/mercadolivre", {
-      headers: { authorization: `Basic ${encoded}` },
-    });
+  it("returns 401 JSON for /api/admin/* when the session cookie is missing", async () => {
+    const request = new NextRequest("http://localhost/api/admin/mercadolivre/search");
 
     const response = proxy(request);
 
     expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "unauthorized" });
   });
 
-  it("rejects requests with the wrong user", () => {
-    const encoded = Buffer.from("someone-else:test-password").toString("base64");
+  it("rejects an invalid session cookie", () => {
     const request = new NextRequest("http://localhost/admin/mercadolivre", {
-      headers: { authorization: `Basic ${encoded}` },
+      headers: { cookie: `${ADMIN_SESSION_COOKIE}=garbage` },
     });
 
     const response = proxy(request);
 
-    expect(response.status).toBe(401);
+    expect(response.status).toBe(307);
   });
 
-  it("allows requests with the correct credentials", () => {
-    const encoded = Buffer.from("admin:test-password").toString("base64");
+  it("allows requests with a valid session cookie", () => {
+    const token = createSessionToken();
     const request = new NextRequest("http://localhost/admin/mercadolivre", {
-      headers: { authorization: `Basic ${encoded}` },
+      headers: { cookie: `${ADMIN_SESSION_COOKIE}=${token}` },
     });
 
     const response = proxy(request);
@@ -55,15 +53,26 @@ describe("proxy (admin Basic Auth)", () => {
     expect(response.status).toBe(200);
   });
 
-  it("allows requests when the password itself contains a colon", () => {
-    process.env.ADMIN_PASSWORD = "pass:word";
-    const encoded = Buffer.from("admin:pass:word").toString("base64");
-    const request = new NextRequest("http://localhost/admin/mercadolivre", {
-      headers: { authorization: `Basic ${encoded}` },
+  it("redirects / to /login when unauthenticated", () => {
+    const request = new NextRequest("http://localhost/");
+
+    const response = proxy(request);
+
+    expect(response.status).toBe(307);
+    const location = new URL(response.headers.get("location")!);
+    expect(location.pathname).toBe("/login");
+  });
+
+  it("redirects / to /admin when authenticated", () => {
+    const token = createSessionToken();
+    const request = new NextRequest("http://localhost/", {
+      headers: { cookie: `${ADMIN_SESSION_COOKIE}=${token}` },
     });
 
     const response = proxy(request);
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(307);
+    const location = new URL(response.headers.get("location")!);
+    expect(location.pathname).toBe("/admin");
   });
 });

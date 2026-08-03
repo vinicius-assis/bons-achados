@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/mercadolivre/session";
 import { searchAffiliateProducts, MercadoLivreSessionExpiredError } from "@/lib/mercadolivre/hubClient";
 import { findGeneratedTodayMap } from "@/lib/mercadolivre/createLink";
-import { isAuthorizedAdminRequest } from "@/lib/adminAuth";
+import { isAuthorizedAdminRequest } from "@/lib/adminSession";
 
 export async function GET(request: NextRequest) {
   if (!isAuthorizedAdminRequest(request)) {

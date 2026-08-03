@@ -19,8 +19,11 @@ import { GET } from "@/app/api/admin/mercadolivre/search/route";
 import { getSession } from "@/lib/mercadolivre/session";
 import { searchAffiliateProducts, MercadoLivreSessionExpiredError } from "@/lib/mercadolivre/hubClient";
 import { findGeneratedTodayMap } from "@/lib/mercadolivre/createLink";
+import { ADMIN_SESSION_COOKIE, createSessionToken } from "@/lib/adminSession";
 
-const AUTH_HEADER = { authorization: `Basic ${Buffer.from("admin:test-password").toString("base64")}` };
+function authHeader() {
+  return { cookie: `${ADMIN_SESSION_COOKIE}=${createSessionToken()}` };
+}
 
 const item = {
   itemId: "MLB123",
@@ -41,7 +44,7 @@ function buildRequest(query = "creatina", offset?: number) {
   if (offset !== undefined) {
     url.searchParams.set("offset", String(offset));
   }
-  return new NextRequest(url, { headers: AUTH_HEADER });
+  return new NextRequest(url, { headers: authHeader() });
 }
 
 describe("GET /api/admin/mercadolivre/search", () => {
@@ -56,7 +59,7 @@ describe("GET /api/admin/mercadolivre/search", () => {
     delete process.env.ADMIN_PASSWORD;
   });
 
-  it("returns 401 without calling any library functions when Basic Auth is missing or invalid", async () => {
+  it("returns 401 without calling any library functions when the session cookie is missing or invalid", async () => {
     const request = new NextRequest("http://localhost/api/admin/mercadolivre/search?q=creatina");
 
     const response = await GET(request);

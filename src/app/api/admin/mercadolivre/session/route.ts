@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, saveSession } from "@/lib/mercadolivre/session";
 import { parseCurlCommand } from "@/lib/mercadolivre/parseCurl";
-import { isAuthorizedAdminRequest } from "@/lib/adminAuth";
+import { isAuthorizedAdminRequest } from "@/lib/adminSession";
 
 export async function GET(request: NextRequest) {
   if (!isAuthorizedAdminRequest(request)) {

@@ -13,10 +13,13 @@ import { POST } from "@/app/api/admin/mercadolivre/generate-link/route";
 import { getSession } from "@/lib/mercadolivre/session";
 import { createAffiliateLink, recordGeneratedLink } from "@/lib/mercadolivre/createLink";
 import { MercadoLivreSessionExpiredError } from "@/lib/mercadolivre/hubClient";
+import { ADMIN_SESSION_COOKIE, createSessionToken } from "@/lib/adminSession";
 
-const AUTH_HEADER = { authorization: `Basic ${Buffer.from("admin:test-password").toString("base64")}` };
+function authHeader() {
+  return { cookie: `${ADMIN_SESSION_COOKIE}=${createSessionToken()}` };
+}
 
-function buildRequest(body: unknown, headers: Record<string, string> = AUTH_HEADER) {
+function buildRequest(body: unknown, headers: Record<string, string> = authHeader()) {
   return new NextRequest("http://localhost/api/admin/mercadolivre/generate-link", {
     method: "POST",
     headers,
@@ -36,7 +39,7 @@ describe("POST /api/admin/mercadolivre/generate-link", () => {
     delete process.env.ADMIN_PASSWORD;
   });
 
-  it("returns 401 without calling getSession when Basic Auth is missing or invalid", async () => {
+  it("returns 401 without calling getSession when the session cookie is missing or invalid", async () => {
     const response = await POST(
       buildRequest({ itemId: "MLB1", url: "https://x", title: "Produto" }, {})
     );

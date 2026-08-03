@@ -1,21 +1,28 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { isAuthorizedAdminRequest } from "@/lib/adminAuth";
-
-const UNAUTHORIZED_RESPONSE = () =>
-  new NextResponse("Authentication required", {
-    status: 401,
-    headers: { "WWW-Authenticate": 'Basic realm="Admin"' },
-  });
+import { isAuthorizedAdminRequest } from "@/lib/adminSession";
 
 export function proxy(request: NextRequest) {
-  if (!isAuthorizedAdminRequest(request)) {
-    return UNAUTHORIZED_RESPONSE();
+  const authorized = isAuthorizedAdminRequest(request);
+  const { pathname } = request.nextUrl;
+
+  if (pathname === "/") {
+    return NextResponse.redirect(new URL(authorized ? "/admin" : "/login", request.url));
   }
 
-  return NextResponse.next();
+  if (authorized) {
+    return NextResponse.next();
+  }
+
+  if (pathname.startsWith("/api/admin")) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  const loginUrl = new URL("/login", request.url);
+  loginUrl.searchParams.set("next", pathname);
+  return NextResponse.redirect(loginUrl);
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/admin/:path*"],
+  matcher: ["/", "/admin/:path*", "/api/admin/:path*"],
 };

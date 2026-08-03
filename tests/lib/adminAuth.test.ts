@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { isAuthorizedAdminRequest } from "@/lib/adminAuth";
+import { isValidAdminCredentials } from "@/lib/adminAuth";
 
-describe("isAuthorizedAdminRequest", () => {
+describe("isValidAdminCredentials", () => {
   beforeEach(() => {
     process.env.ADMIN_USER = "admin";
     process.env.ADMIN_PASSWORD = "test-password";
@@ -12,46 +12,20 @@ describe("isAuthorizedAdminRequest", () => {
     delete process.env.ADMIN_PASSWORD;
   });
 
-  it("returns false when the Authorization header is missing", () => {
-    const request = new Request("http://localhost/admin/mercadolivre");
-
-    expect(isAuthorizedAdminRequest(request)).toBe(false);
-  });
-
   it("returns false for the wrong password", () => {
-    const encoded = Buffer.from("admin:wrong-password").toString("base64");
-    const request = new Request("http://localhost/admin/mercadolivre", {
-      headers: { authorization: `Basic ${encoded}` },
-    });
-
-    expect(isAuthorizedAdminRequest(request)).toBe(false);
+    expect(isValidAdminCredentials("admin", "wrong-password")).toBe(false);
   });
 
   it("returns false for the wrong user", () => {
-    const encoded = Buffer.from("someone-else:test-password").toString("base64");
-    const request = new Request("http://localhost/admin/mercadolivre", {
-      headers: { authorization: `Basic ${encoded}` },
-    });
-
-    expect(isAuthorizedAdminRequest(request)).toBe(false);
+    expect(isValidAdminCredentials("someone-else", "test-password")).toBe(false);
   });
 
   it("returns true for correct credentials", () => {
-    const encoded = Buffer.from("admin:test-password").toString("base64");
-    const request = new Request("http://localhost/admin/mercadolivre", {
-      headers: { authorization: `Basic ${encoded}` },
-    });
-
-    expect(isAuthorizedAdminRequest(request)).toBe(true);
+    expect(isValidAdminCredentials("admin", "test-password")).toBe(true);
   });
 
   it("returns true when the password itself contains a colon", () => {
     process.env.ADMIN_PASSWORD = "pass:word";
-    const encoded = Buffer.from("admin:pass:word").toString("base64");
-    const request = new Request("http://localhost/admin/mercadolivre", {
-      headers: { authorization: `Basic ${encoded}` },
-    });
-
-    expect(isAuthorizedAdminRequest(request)).toBe(true);
+    expect(isValidAdminCredentials("admin", "pass:word")).toBe(true);
   });
 });
