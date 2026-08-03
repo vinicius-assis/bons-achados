@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/mercadolivre/session";
 import { searchAffiliateProducts, MercadoLivreSessionExpiredError } from "@/lib/mercadolivre/hubClient";
 import { findGeneratedTodayMap } from "@/lib/mercadolivre/createLink";
+import { isAuthorizedAdminRequest } from "@/lib/adminAuth";
 
 export async function GET(request: NextRequest) {
+  if (!isAuthorizedAdminRequest(request)) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   const query = request.nextUrl.searchParams.get("q") ?? "";
 
   const session = await getSession();

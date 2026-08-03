@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { isAuthorizedAdminRequest } from "@/lib/adminAuth";
 
 const UNAUTHORIZED_RESPONSE = () =>
   new NextResponse("Authentication required", {
@@ -8,16 +9,7 @@ const UNAUTHORIZED_RESPONSE = () =>
   });
 
 export function proxy(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (!authHeader?.startsWith("Basic ")) {
-    return UNAUTHORIZED_RESPONSE();
-  }
-
-  const encoded = authHeader.slice("Basic ".length);
-  const decoded = Buffer.from(encoded, "base64").toString("utf-8");
-  const [providedUser, providedPassword] = decoded.split(":");
-
-  if (providedUser !== process.env.ADMIN_USER || providedPassword !== process.env.ADMIN_PASSWORD) {
+  if (!isAuthorizedAdminRequest(request)) {
     return UNAUTHORIZED_RESPONSE();
   }
 

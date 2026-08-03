@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextRequest } from "next/server";
 
 vi.mock("@/lib/mercadolivre/session", () => ({
@@ -14,16 +14,35 @@ import { getSession } from "@/lib/mercadolivre/session";
 import { createAffiliateLink, recordGeneratedLink } from "@/lib/mercadolivre/createLink";
 import { MercadoLivreSessionExpiredError } from "@/lib/mercadolivre/hubClient";
 
-function buildRequest(body: unknown) {
+const AUTH_HEADER = { authorization: `Basic ${Buffer.from("admin:test-password").toString("base64")}` };
+
+function buildRequest(body: unknown, headers: Record<string, string> = AUTH_HEADER) {
   return new NextRequest("http://localhost/api/admin/mercadolivre/generate-link", {
     method: "POST",
+    headers,
     body: JSON.stringify(body),
   });
 }
 
 describe("POST /api/admin/mercadolivre/generate-link", () => {
+  beforeEach(() => {
+    process.env.ADMIN_USER = "admin";
+    process.env.ADMIN_PASSWORD = "test-password";
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
+    delete process.env.ADMIN_USER;
+    delete process.env.ADMIN_PASSWORD;
+  });
+
+  it("returns 401 without calling getSession when Basic Auth is missing or invalid", async () => {
+    const response = await POST(
+      buildRequest({ itemId: "MLB1", url: "https://x", title: "Produto" }, {})
+    );
+
+    expect(response.status).toBe(401);
+    expect(getSession).not.toHaveBeenCalled();
   });
 
   it("returns 400 when itemId, url, or title is missing", async () => {

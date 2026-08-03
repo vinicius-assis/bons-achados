@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextRequest } from "next/server";
 
 vi.mock("@/lib/mercadolivre/session", () => ({
@@ -42,8 +42,26 @@ function buildRequest(query = "creatina") {
 }
 
 describe("GET /api/admin/mercadolivre/search", () => {
+  beforeEach(() => {
+    process.env.ADMIN_USER = "admin";
+    process.env.ADMIN_PASSWORD = "test-password";
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
+    delete process.env.ADMIN_USER;
+    delete process.env.ADMIN_PASSWORD;
+  });
+
+  it("returns 401 without calling any library functions when Basic Auth is missing or invalid", async () => {
+    const request = new NextRequest("http://localhost/api/admin/mercadolivre/search?q=creatina");
+
+    const response = await GET(request);
+
+    expect(response.status).toBe(401);
+    expect(getSession).not.toHaveBeenCalled();
+    expect(searchAffiliateProducts).not.toHaveBeenCalled();
+    expect(findGeneratedTodayMap).not.toHaveBeenCalled();
   });
 
   it("returns 401 session_expired when no session is stored", async () => {

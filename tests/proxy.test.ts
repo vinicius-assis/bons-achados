@@ -54,4 +54,16 @@ describe("proxy (admin Basic Auth)", () => {
 
     expect(response.status).toBe(200);
   });
+
+  it("allows requests when the password itself contains a colon", () => {
+    process.env.ADMIN_PASSWORD = "pass:word";
+    const encoded = Buffer.from("admin:pass:word").toString("base64");
+    const request = new NextRequest("http://localhost/admin/mercadolivre", {
+      headers: { authorization: `Basic ${encoded}` },
+    });
+
+    const response = proxy(request);
+
+    expect(response.status).toBe(200);
+  });
 });
