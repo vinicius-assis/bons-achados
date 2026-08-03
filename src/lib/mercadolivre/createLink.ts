@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { MLHubSession } from "@/lib/mercadolivre/session";
-import { MercadoLivreSessionExpiredError } from "@/lib/mercadolivre/hubClient";
+import { MercadoLivreSessionExpiredError, BROWSER_LIKE_HEADERS } from "@/lib/mercadolivre/hubClient";
 
 const CREATE_LINK_URL =
   "https://www.mercadolivre.com.br/affiliate-program/api/v2/affiliates/createLink";
@@ -17,6 +17,7 @@ export async function createAffiliateLink(
   const response = await fetch(CREATE_LINK_URL, {
     method: "POST",
     headers: {
+      ...BROWSER_LIKE_HEADERS,
       "content-type": "application/json",
       accept: "application/json, text/plain, */*",
       origin: "https://www.mercadolivre.com.br",
@@ -29,6 +30,7 @@ export async function createAffiliateLink(
   });
 
   if (response.status === 401 || response.status === 403) {
+    console.error(`Mercado Livre createLink rejected the session: HTTP ${response.status}`);
     throw new MercadoLivreSessionExpiredError();
   }
   if (!response.ok) {

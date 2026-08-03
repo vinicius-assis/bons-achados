@@ -3,6 +3,21 @@ import type { MLHubSession } from "@/lib/mercadolivre/session";
 const HUB_SEARCH_URL =
   "https://www.mercadolivre.com.br/affiliate-program/api/hub/search?is_affiliate=true&device=desktop";
 
+// Mercado Livre's affiliate hub is an internal, browser-only endpoint. Called
+// from a serverless function (no real browser fingerprint, a datacenter IP),
+// it can be treated as bot traffic without these headers even when the
+// session cookies themselves are perfectly valid.
+export const BROWSER_LIKE_HEADERS = {
+  "user-agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  "sec-ch-ua": '"Chromium";v="131", "Not_A Brand";v="24", "Google Chrome";v="131"',
+  "sec-ch-ua-mobile": "?0",
+  "sec-ch-ua-platform": '"Windows"',
+  "sec-fetch-dest": "empty",
+  "sec-fetch-mode": "cors",
+  "sec-fetch-site": "same-origin",
+} as const;
+
 export type MLHubItem = {
   itemId: string;
   title: string;
@@ -102,6 +117,7 @@ export async function searchAffiliateProducts(
   const response = await fetch(HUB_SEARCH_URL, {
     method: "POST",
     headers: {
+      ...BROWSER_LIKE_HEADERS,
       "content-type": "application/json",
       accept: "application/json, text/plain, */*",
       origin: "https://www.mercadolivre.com.br",
@@ -119,6 +135,9 @@ export async function searchAffiliateProducts(
   });
 
   if (response.status === 401 || response.status === 403) {
+    console.error(
+      `Mercado Livre hub search rejected the session: HTTP ${response.status}`
+    );
     throw new MercadoLivreSessionExpiredError();
   }
   if (!response.ok) {
@@ -127,6 +146,10 @@ export async function searchAffiliateProducts(
 
   const data = await response.json();
   if (data == null || typeof data !== "object" || !("polycard_client_model" in data)) {
+    console.error(
+      "Mercado Livre hub search returned an unexpected body shape:",
+      JSON.stringify(data).slice(0, 500)
+    );
     throw new MercadoLivreSessionExpiredError();
   }
 
