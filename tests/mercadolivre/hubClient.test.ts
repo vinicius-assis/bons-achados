@@ -88,7 +88,7 @@ describe("searchAffiliateProducts", () => {
         body: JSON.stringify({
           search: "creatina",
           sort: "relevance",
-          filters: [{ id: "best_seller", value: true }],
+          filters: [],
           offset: 30,
         }),
       })
@@ -115,7 +115,7 @@ describe("searchAffiliateProducts", () => {
         body: JSON.stringify({
           search: "creatina",
           sort: "relevance",
-          filters: [{ id: "best_seller", value: true }],
+          filters: [],
           offset: 0,
         }),
       })

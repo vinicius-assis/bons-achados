@@ -128,7 +128,7 @@ export async function searchAffiliateProducts(
     body: JSON.stringify({
       search: query,
       sort: "relevance",
-      filters: [{ id: "best_seller", value: true }],
+      filters: [],
       offset,
     }),
     signal: AbortSignal.timeout(10_000),

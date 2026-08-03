@@ -23,7 +23,7 @@ function formatPrice(value: number): string {
 
 // Mercado Livre's hub doesn't return a total count or a "has more" flag —
 // a page shorter than this is treated as the last one.
-const PAGE_SIZE = 30;
+const PAGE_SIZE = 18;
 
 /**
  * The commission chip is drawn as the price tag from the logo mark: a notched
@@ -123,57 +123,74 @@ export default function MercadoLivreAdmin() {
     });
   }
 
-  async function fetchPage(offset: number): Promise<MLHubItem[] | null> {
-    const response = await fetch(
-      `/api/admin/mercadolivre/search?q=${encodeURIComponent(query)}&offset=${offset}`
-    );
-    if (response.status === 401) {
-      expireSession();
-      return null;
+  const fetchPage = useCallback(
+    async (offset: number): Promise<MLHubItem[] | null> => {
+      const response = await fetch(
+        `/api/admin/mercadolivre/search?q=${encodeURIComponent(query)}&offset=${offset}`
+      );
+      if (response.status === 401) {
+        expireSession();
+        return null;
+      }
+      const body = await response.json();
+      if (!response.ok) {
+        throw new Error("search_failed");
+      }
+      return Array.isArray(body.items) ? body.items : [];
+    },
+    [query, expireSession]
+  );
+
+  const loadPage = useCallback(
+    async (offset: number, mode: "replace" | "append") => {
+      const setLoadingState = mode === "replace" ? setSearching : setLoadingMore;
+      setLoadingState(true);
+      setSearchError(null);
+      try {
+        const fetchedItems = await fetchPage(offset);
+        if (fetchedItems === null) {
+          return;
+        }
+        setItems((previous) => (mode === "replace" ? fetchedItems : [...previous, ...fetchedItems]));
+        mergeGeneratedLinks(fetchedItems);
+        setHasMore(fetchedItems.length >= PAGE_SIZE);
+        setSearched(true);
+      } catch {
+        setSearchError(
+          mode === "replace"
+            ? "A busca falhou. Tente de novo em alguns segundos."
+            : "Não deu para carregar mais produtos. Tente de novo em alguns segundos."
+        );
+      } finally {
+        setLoadingState(false);
+      }
+    },
+    [fetchPage]
+  );
+
+  // Loads the default listing as soon as a session is available, the same
+  // way opening Mercado Livre's own affiliate hub shows items immediately —
+  // this is a one-shot "load on session ready" effect, not a live query
+  // sync, so it intentionally only depends on hasSession.
+  useEffect(() => {
+    if (!hasSession) {
+      return;
     }
-    const body = await response.json();
-    if (!response.ok) {
-      throw new Error("search_failed");
-    }
-    return Array.isArray(body.items) ? body.items : [];
-  }
+    // Deferred to a microtask so the state updates inside loadPage happen
+    // outside the effect's synchronous body, not as its direct side effect.
+    queueMicrotask(() => {
+      void loadPage(0, "replace");
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasSession]);
 
   async function handleSearch(event: React.FormEvent) {
     event.preventDefault();
-    setSearching(true);
-    setSearchError(null);
-    try {
-      const fetchedItems = await fetchPage(0);
-      if (fetchedItems === null) {
-        return;
-      }
-      setItems(fetchedItems);
-      mergeGeneratedLinks(fetchedItems);
-      setHasMore(fetchedItems.length >= PAGE_SIZE);
-      setSearched(true);
-    } catch {
-      setSearchError("A busca falhou. Tente de novo em alguns segundos.");
-    } finally {
-      setSearching(false);
-    }
+    await loadPage(0, "replace");
   }
 
   async function handleLoadMore() {
-    setLoadingMore(true);
-    setSearchError(null);
-    try {
-      const fetchedItems = await fetchPage(items.length);
-      if (fetchedItems === null) {
-        return;
-      }
-      setItems((previous) => [...previous, ...fetchedItems]);
-      mergeGeneratedLinks(fetchedItems);
-      setHasMore(fetchedItems.length >= PAGE_SIZE);
-    } catch {
-      setSearchError("Não deu para carregar mais produtos. Tente de novo em alguns segundos.");
-    } finally {
-      setLoadingMore(false);
-    }
+    await loadPage(items.length, "append");
   }
 
   async function handleGenerateLink(item: MLHubItem) {
@@ -363,10 +380,9 @@ export default function MercadoLivreAdmin() {
               </label>
               <input
                 id="ml-query"
-                required
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="fone bluetooth, air fryer, cadeira gamer…"
+                placeholder="fone bluetooth, air fryer, cadeira gamer… (deixe em branco pra ver a listagem padrão)"
                 className="min-w-0 flex-1 rounded-full border border-ink-line bg-ink-raised px-5 py-3 text-sm text-paper placeholder:text-ash/70 focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
               />
               <button
@@ -412,7 +428,11 @@ export default function MercadoLivreAdmin() {
               </p>
             )}
 
-            {!searched && !searchError && (
+            {!searched && searching && (
+              <p className="mt-10 text-sm text-ash">Carregando a listagem do hub…</p>
+            )}
+
+            {!searched && !searching && !searchError && (
               <p className="mt-10 max-w-md text-sm text-ash">
                 Busque um termo para ver os produtos do hub com preço, desconto e comissão — e
                 gere o link de afiliado direto daqui.
