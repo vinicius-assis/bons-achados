@@ -633,7 +633,7 @@ git commit -m "feat: add PostDraft store with same-day duplicate detection"
 ### Task 5: Brand assets, font, and image composition (`postdraft/images.ts`)
 
 **Files:**
-- Create: `assets/brand-kit/MOLDURA_diagonal_story_1080x1920.png` (binary, copied)
+- Already present (added ahead of this task): `assets/brand-kit/MOLDURA_diagonal_story_1080x1920.png` — verify it exists before proceeding, do not recreate or replace it.
 - Create: `assets/brand-kit/SELO_70pct_400px.png` (binary, copied)
 - Create: `assets/fonts/ArchivoBlack-Regular.ttf` (binary, downloaded)
 - Create: `src/lib/postdraft/images.ts`
@@ -654,15 +654,23 @@ git commit -m "feat: add PostDraft store with same-day duplicate detection"
 Run: `npm install sharp @napi-rs/canvas`
 Expected: both added to `package.json` `dependencies`, `npm run build` still succeeds afterward (run it to confirm no native-binary install errors).
 
-- [ ] **Step 2: Copy the brand assets from the standalone Python project**
+- [ ] **Step 2: Copy the brand assets**
+
+`assets/brand-kit/MOLDURA_diagonal_story_1080x1920.png` was already added directly to the
+repo (a revised moldura design, replacing the one from the standalone Python project —
+white/transparent center, diagonal "OFERTA" corner, bottom bar with logo and legal
+disclaimer, no price-pill space reserved in the graphic itself). If it is not already
+present, stop and ask — do not substitute the old Python project's moldura file. Only the
+selo still needs copying:
 
 ```bash
 mkdir -p assets/brand-kit assets/fonts
-cp ~/Documentos/Produtos/molduras/MOLDURA_diagonal_story_1080x1920.png assets/brand-kit/
 cp ~/Documentos/Produtos/molduras/SELO_70pct_400px.png assets/brand-kit/
 ```
 
-Expected: both files present under `assets/brand-kit/`, `MOLDURA_diagonal_story_1080x1920.png` is exactly 1080×1920px (`file assets/brand-kit/MOLDURA_diagonal_story_1080x1920.png` should report `1080 x 1920`).
+Expected: both files present under `assets/brand-kit/`, `MOLDURA_diagonal_story_1080x1920.png`
+is exactly 1080×1920px, RGBA with a transparent center (`file assets/brand-kit/MOLDURA_diagonal_story_1080x1920.png`
+should report `1080 x 1920` and `PNG image data, ... RGBA`).
 
 - [ ] **Step 3: Download the price-pill font**
 
@@ -745,7 +753,11 @@ const PILL_HEIGHT = 113;
 const PILL_COLOR = "#F9B50C";
 const PILL_TEXT_COLOR = "#0D1012";
 const PILL_GAP_ABOVE_BAR = 41;
-const BAR_HEIGHT = 195;
+// Measured from the current MOLDURA_diagonal_story_1080x1920.png: the opaque
+// bottom bar (thin gold rule + logo + "@bonsachados · link na bio" + legal
+// disclaimer) starts at y=1658 on a 1920px-tall canvas, so its height is
+// 1920 - 1658 = 262px. Re-measure this if the moldura asset changes again.
+const BAR_HEIGHT = 262;
 
 const SELO_MARGIN_RATIO = 0.05;
 const SELO_SIZE_RATIO = 0.15;
