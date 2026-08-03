@@ -46,7 +46,9 @@ export async function POST(request: NextRequest) {
     !title ||
     !affiliateLink ||
     !image ||
-    Number.isNaN(price)
+    Number.isNaN(price) ||
+    !Number.isFinite(price) ||
+    price <= 0
   ) {
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });
   }

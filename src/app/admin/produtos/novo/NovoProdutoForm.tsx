@@ -55,7 +55,7 @@ export default function NovoProdutoForm() {
 
   async function submitRow(row: Row) {
     const price = Number(row.price.replace(",", "."));
-    if (!row.title || !row.affiliateLink || !row.image || Number.isNaN(price)) {
+    if (!row.title || !row.affiliateLink || !row.image || !row.price.trim() || Number.isNaN(price)) {
       setStatuses((previous) => ({ ...previous, [row.key]: { kind: "error", message: "Preencha nome, link, imagem e preço." } }));
       return;
     }

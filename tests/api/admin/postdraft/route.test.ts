@@ -94,6 +94,20 @@ describe("POST /api/admin/postdraft", () => {
     expect(createPostDraft).not.toHaveBeenCalled();
   });
 
+  it("returns 400 for a zero price", async () => {
+    const response = await POST(buildRequest({ ...VALID_BODY, price: 0 }));
+
+    expect(response.status).toBe(400);
+    expect(createPostDraft).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for a negative price", async () => {
+    const response = await POST(buildRequest({ ...VALID_BODY, price: -10 }));
+
+    expect(response.status).toBe(400);
+    expect(createPostDraft).not.toHaveBeenCalled();
+  });
+
   it("creates a post draft and returns 201", async () => {
     vi.mocked(createPostDraft).mockResolvedValue({ status: "created", id: "cd1", category: "suplemento" });
 
