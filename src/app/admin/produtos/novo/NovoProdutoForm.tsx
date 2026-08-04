@@ -16,6 +16,7 @@ type Row = {
 };
 
 type RowStatus = { kind: "idle" } | { kind: "saving" } | { kind: "saved"; category: string } | { kind: "duplicate" } | { kind: "error"; message: string };
+type HighlightStatus = { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "error"; message: string };
 
 let nextRowKey = 0;
 function emptyRow(): Row {
@@ -35,6 +36,7 @@ function emptyRow(): Row {
 export default function NovoProdutoForm() {
   const [rows, setRows] = useState<Row[]>([emptyRow()]);
   const [statuses, setStatuses] = useState<Record<number, RowStatus>>({});
+  const [highlightStatuses, setHighlightStatuses] = useState<Record<number, HighlightStatus>>({});
 
   function updateRow(key: number, patch: Partial<Row>) {
     setRows((previous) => previous.map((row) => (row.key === key ? { ...row, ...patch } : row)));
@@ -47,6 +49,11 @@ export default function NovoProdutoForm() {
   function removeRow(key: number) {
     setRows((previous) => previous.filter((row) => row.key !== key));
     setStatuses((previous) => {
+      const next = { ...previous };
+      delete next[key];
+      return next;
+    });
+    setHighlightStatuses((previous) => {
       const next = { ...previous };
       delete next[key];
       return next;
@@ -89,6 +96,47 @@ export default function NovoProdutoForm() {
       setStatuses((previous) => ({ ...previous, [row.key]: { kind: "saved", category: body.category } }));
     } catch {
       setStatuses((previous) => ({ ...previous, [row.key]: { kind: "error", message: "Não deu para cadastrar. Tente de novo." } }));
+    }
+  }
+
+  async function highlightRow(row: Row) {
+    const price = Number(row.price.replace(",", "."));
+    if (!row.title || !row.affiliateLink || !row.image || !row.price.trim() || Number.isNaN(price)) {
+      setHighlightStatuses((previous) => ({
+        ...previous,
+        [row.key]: { kind: "error", message: "Preencha nome, link, imagem e preço." },
+      }));
+      return;
+    }
+
+    setHighlightStatuses((previous) => ({ ...previous, [row.key]: { kind: "saving" } }));
+    try {
+      const response = await fetch("/api/admin/highlights", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          marketplace: row.marketplace,
+          title: row.title,
+          affiliateLink: row.affiliateLink,
+          image: row.image,
+          price,
+          oldPrice: null,
+          discount: row.discount ? Number(row.discount) : null,
+        }),
+      });
+      if (!response.ok) {
+        setHighlightStatuses((previous) => ({
+          ...previous,
+          [row.key]: { kind: "error", message: "Não deu para destacar. Tente de novo." },
+        }));
+        return;
+      }
+      setHighlightStatuses((previous) => ({ ...previous, [row.key]: { kind: "saved" } }));
+    } catch {
+      setHighlightStatuses((previous) => ({
+        ...previous,
+        [row.key]: { kind: "error", message: "Não deu para destacar. Tente de novo." },
+      }));
     }
   }
 
@@ -186,6 +234,23 @@ export default function NovoProdutoForm() {
                     ? "Cadastrado ✓"
                     : "Cadastrar"}
               </button>
+              {(() => {
+                const highlightStatus = highlightStatuses[row.key] ?? { kind: "idle" as const };
+                return (
+                  <button
+                    type="button"
+                    onClick={() => highlightRow(row)}
+                    disabled={highlightStatus.kind === "saving" || highlightStatus.kind === "saved"}
+                    className="rounded-full border border-ink-line px-6 py-2.5 font-display font-stretch-condensed text-sm font-black tracking-wide text-paper uppercase italic transition hover:border-gold hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {highlightStatus.kind === "saving"
+                      ? "Destacando…"
+                      : highlightStatus.kind === "saved"
+                        ? "Na vitrine ✓"
+                        : "Destacar na vitrine"}
+                  </button>
+                );
+              })()}
               {rows.length > 1 && (
                 <button
                   type="button"
@@ -206,6 +271,11 @@ export default function NovoProdutoForm() {
               {status.kind === "error" && (
                 <span role="alert" className="text-sm text-alert">
                   {status.message}
+                </span>
+              )}
+              {highlightStatuses[row.key]?.kind === "error" && (
+                <span role="alert" className="text-sm text-alert">
+                  {(highlightStatuses[row.key] as { kind: "error"; message: string }).message}
                 </span>
               )}
             </div>
