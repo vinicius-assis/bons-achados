@@ -53,26 +53,24 @@ describe("proxy (admin session auth)", () => {
     expect(response.status).toBe(200);
   });
 
-  it("redirects / to /login when unauthenticated", () => {
-    const request = new NextRequest("http://localhost/");
+  it("does not intercept / (public vitrine page), authenticated or not", () => {
+    const unauthenticated = proxy(new NextRequest("http://localhost/"));
+    expect(unauthenticated.status).toBe(200);
 
-    const response = proxy(request);
-
-    expect(response.status).toBe(307);
-    const location = new URL(response.headers.get("location")!);
-    expect(location.pathname).toBe("/login");
+    const token = createSessionToken();
+    const authenticated = proxy(
+      new NextRequest("http://localhost/", {
+        headers: { cookie: `${ADMIN_SESSION_COOKIE}=${token}` },
+      })
+    );
+    expect(authenticated.status).toBe(200);
   });
 
-  it("redirects / to /admin when authenticated", () => {
-    const token = createSessionToken();
-    const request = new NextRequest("http://localhost/", {
-      headers: { cookie: `${ADMIN_SESSION_COOKIE}=${token}` },
-    });
+  it("does not intercept public routes outside /admin", () => {
+    const request = new NextRequest("http://localhost/some-public-page");
 
     const response = proxy(request);
 
-    expect(response.status).toBe(307);
-    const location = new URL(response.headers.get("location")!);
-    expect(location.pathname).toBe("/admin");
+    expect(response.status).toBe(200);
   });
 });

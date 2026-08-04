@@ -3,14 +3,14 @@ import type { NextRequest } from "next/server";
 import { isAuthorizedAdminRequest } from "@/lib/adminSession";
 
 export function proxy(request: NextRequest) {
-  const authorized = isAuthorizedAdminRequest(request);
   const { pathname } = request.nextUrl;
+  const isProtected = pathname.startsWith("/admin") || pathname.startsWith("/api/admin");
 
-  if (pathname === "/") {
-    return NextResponse.redirect(new URL(authorized ? "/admin" : "/login", request.url));
+  if (!isProtected) {
+    return NextResponse.next();
   }
 
-  if (authorized) {
+  if (isAuthorizedAdminRequest(request)) {
     return NextResponse.next();
   }
 
@@ -24,5 +24,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/admin/:path*", "/api/admin/:path*"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
