@@ -71,6 +71,8 @@ export default function MercadoLivreAdmin() {
   const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
   const [selectingItemId, setSelectingItemId] = useState<string | null>(null);
   const [selectedForPost, setSelectedForPost] = useState<Record<string, boolean>>({});
+  const [highlightingItemId, setHighlightingItemId] = useState<string | null>(null);
+  const [highlightedItems, setHighlightedItems] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetch("/api/admin/mercadolivre/session")
@@ -263,6 +265,39 @@ export default function MercadoLivreAdmin() {
       setSearchError(`Não deu para selecionar "${item.title}" para postar. Tente de novo.`);
     } finally {
       setSelectingItemId(null);
+    }
+  }
+
+  async function handleHighlight(item: MLHubItem, affiliateLink: string) {
+    setHighlightingItemId(item.itemId);
+    setSearchError(null);
+    try {
+      const response = await fetch("/api/admin/highlights", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          marketplace: "MERCADO_LIVRE",
+          title: item.title,
+          affiliateLink,
+          image: item.image,
+          price: item.price,
+          oldPrice: item.oldPrice,
+          discount: parseDiscountPercentage(item.discountLabel),
+        }),
+      });
+      if (response.status === 401) {
+        expireSession();
+        return;
+      }
+      if (!response.ok) {
+        setSearchError(`Não deu para destacar "${item.title}" na vitrine. Tente de novo.`);
+        return;
+      }
+      setHighlightedItems((previous) => ({ ...previous, [item.itemId]: true }));
+    } catch {
+      setSearchError(`Não deu para destacar "${item.title}" na vitrine. Tente de novo.`);
+    } finally {
+      setHighlightingItemId(null);
     }
   }
 
@@ -572,6 +607,20 @@ export default function MercadoLivreAdmin() {
                               : selectingItemId === item.itemId
                                 ? "Selecionando…"
                                 : "Selecionar para postar"}
+                          </button>
+                        )}
+                        {generatedLink && (
+                          <button
+                            type="button"
+                            onClick={() => handleHighlight(item, generatedLink)}
+                            disabled={highlightingItemId === item.itemId || highlightedItems[item.itemId]}
+                            className="mt-2 w-full rounded-full border border-ink/15 bg-ink/[0.04] px-4 py-2 font-mono text-[10px] tracking-wider text-ink uppercase transition hover:bg-ink hover:text-gold focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {highlightedItems[item.itemId]
+                              ? "Na vitrine ✓"
+                              : highlightingItemId === item.itemId
+                                ? "Destacando…"
+                                : "Destacar na vitrine"}
                           </button>
                         )}
                       </div>
