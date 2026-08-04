@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/admin/produtos/novo", label: "Cadastrar produto" },
   { href: "/admin/mercadolivre", label: "Hub Mercado Livre" },
   { href: "/admin/postar", label: "Postar" },
+  { href: "/admin/vitrine", label: "Vitrine" },
 ];
 
 export default function AdminNav() {
