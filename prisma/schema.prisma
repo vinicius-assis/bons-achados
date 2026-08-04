@@ -74,3 +74,26 @@ model PostDraft {
 
   @@index([affiliateLink, createdAt])
 }
+
+model Highlight {
+  id            String      @id @default(cuid())
+  marketplace   Marketplace
+  title         String
+  affiliateLink String
+  image         String
+  price         Float
+  oldPrice      Float?
+  discount      Float?
+  createdAt     DateTime    @default(now())
+
+  @@index([createdAt])
+}
+
+model LoginAttempt {
+  id          String   @id @default(cuid())
+  ip          String
+  windowStart DateTime
+  count       Int      @default(1)
+
+  @@unique([ip, windowStart])
+}
