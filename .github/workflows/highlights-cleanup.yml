@@ -1,0 +1,15 @@
+name: Highlights cleanup
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # 00:00 America/Sao_Paulo (fixed UTC-3, no DST)
+  workflow_dispatch: {}
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call the cleanup endpoint
+        run: |
+          curl -sf -X POST "${{ secrets.APP_URL }}/api/cron/highlights-cleanup" \
+            -H "Authorization: Bearer ${{ secrets.HIGHLIGHTS_CLEANUP_SECRET }}"
