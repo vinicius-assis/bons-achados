@@ -1,18 +1,7 @@
 import type { Marketplace, PostDraft, ProductSource } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { categorize } from "@/lib/postdraft/categorize";
-
-const BRAZIL_UTC_OFFSET_MS = -3 * 60 * 60 * 1000; // fixed offset, Brazil has not observed DST since 2019
-
-function startOfTodayInBrazil(now: Date = new Date()): Date {
-  const brazilNow = new Date(now.getTime() + BRAZIL_UTC_OFFSET_MS);
-  const startOfDayBrazilMs = Date.UTC(
-    brazilNow.getUTCFullYear(),
-    brazilNow.getUTCMonth(),
-    brazilNow.getUTCDate()
-  );
-  return new Date(startOfDayBrazilMs - BRAZIL_UTC_OFFSET_MS);
-}
+import { startOfTodayInBrazil } from "@/lib/date";
 
 export type CreatePostDraftInput = {
   marketplace: Marketplace;
