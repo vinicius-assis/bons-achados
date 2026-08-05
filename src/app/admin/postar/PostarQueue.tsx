@@ -6,6 +6,7 @@ type PostDraftItem = {
   id: string;
   title: string;
   affiliateLink: string;
+  image: string;
   price: number;
   discount: number | null;
   marketplace: string;
@@ -23,6 +24,8 @@ export default function PostarQueue() {
   const [clearing, setClearing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
+  const [highlightingId, setHighlightingId] = useState<string | null>(null);
+  const [highlightedIds, setHighlightedIds] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,6 +89,34 @@ export default function PostarQueue() {
     }
   }
 
+  async function handleHighlight(item: PostDraftItem) {
+    setHighlightingId(item.id);
+    setError(null);
+    try {
+      const response = await fetch("/api/admin/highlights", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          marketplace: item.marketplace,
+          title: item.title,
+          affiliateLink: item.affiliateLink,
+          image: item.image,
+          price: item.price,
+          oldPrice: null,
+          discount: item.discount,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error("highlight_failed");
+      }
+      setHighlightedIds((previous) => ({ ...previous, [item.id]: true }));
+    } catch {
+      setError("Não deu para destacar na vitrine. Tente de novo.");
+    } finally {
+      setHighlightingId(null);
+    }
+  }
+
   if (loading) {
     return <p className="text-sm text-ash">Carregando a fila…</p>;
   }
@@ -145,6 +176,18 @@ export default function PostarQueue() {
                 </button>
               </div>
             </div>
+            <button
+              type="button"
+              onClick={() => handleHighlight(item)}
+              disabled={highlightingId === item.id || highlightedIds[item.id]}
+              className="mt-2 w-full rounded-full border border-ink-line px-4 py-2 font-mono text-[10px] tracking-wider text-gold uppercase transition hover:bg-gold hover:text-ink focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {highlightedIds[item.id]
+                ? "Na vitrine ✓"
+                : highlightingId === item.id
+                  ? "Destacando…"
+                  : "Destacar na vitrine"}
+            </button>
             <div className="mt-3 grid grid-cols-2 gap-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
