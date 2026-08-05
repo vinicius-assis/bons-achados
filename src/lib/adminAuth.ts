@@ -15,5 +15,10 @@ function safeEqual(a: string, b: string): boolean {
 export function isValidAdminCredentials(username: string, password: string): boolean {
   const expectedUsername = process.env.ADMIN_USER ?? "";
   const expectedPassword = process.env.ADMIN_PASSWORD ?? "";
-  return safeEqual(username, expectedUsername) && safeEqual(password, expectedPassword);
+  if (!expectedUsername || !expectedPassword) {
+    return false;
+  }
+  const usernameMatches = safeEqual(username, expectedUsername);
+  const passwordMatches = safeEqual(password, expectedPassword);
+  return usernameMatches && passwordMatches;
 }

@@ -34,4 +34,11 @@ describe("isValidAdminCredentials", () => {
     expect(() => isValidAdminCredentials("admin", "short")).not.toThrow();
     expect(isValidAdminCredentials("admin", "short")).toBe(false);
   });
+
+  it("fails closed when ADMIN_USER/ADMIN_PASSWORD are unset", () => {
+    delete process.env.ADMIN_USER;
+    delete process.env.ADMIN_PASSWORD;
+    expect(isValidAdminCredentials("", "")).toBe(false);
+    expect(isValidAdminCredentials("admin", "")).toBe(false);
+  });
 });
