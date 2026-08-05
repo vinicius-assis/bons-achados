@@ -30,6 +30,27 @@ const MARKETPLACE_LABEL: Record<string, string> = {
   SHOPEE: "Shopee",
 };
 
+const MARKETPLACE_BADGE_STYLE: Record<string, { bg: string; text: string }> = {
+  MERCADO_LIVRE: { bg: "bg-[#FFE600]", text: "text-[#2D3277]" },
+  AMAZON: { bg: "bg-ink", text: "text-paper" },
+  SHOPEE: { bg: "bg-[#EE4D2D]", text: "text-white" },
+};
+
+// Colored per marketplace (own palette, not a reproduction of any brand's
+// logo) so the pill is scannable at a glance without relying on icons.
+function MarketplaceBadge({ marketplace }: { marketplace: string }) {
+  const label = MARKETPLACE_LABEL[marketplace] ?? marketplace;
+  const style = MARKETPLACE_BADGE_STYLE[marketplace] ?? { bg: "bg-ash/30", text: "text-ink" };
+
+  return (
+    <span
+      className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 font-mono text-[10px] font-bold tracking-wider uppercase ${style.bg} ${style.text}`}
+    >
+      {label}
+    </span>
+  );
+}
+
 export default async function VitrinePage() {
   const highlights = await listTodaysHighlights();
 
@@ -78,9 +99,7 @@ export default async function VitrinePage() {
                   />
                 </div>
                 <div className="flex flex-1 flex-col gap-2 border-t border-ink/10 p-4">
-                  <p className="font-mono text-[10px] tracking-wider text-ash uppercase">
-                    {MARKETPLACE_LABEL[highlight.marketplace] ?? highlight.marketplace}
-                  </p>
+                  <MarketplaceBadge marketplace={highlight.marketplace} />
                   <h2 className="line-clamp-2 text-sm leading-snug font-medium text-ink">
                     {highlight.title}
                   </h2>
@@ -98,10 +117,23 @@ export default async function VitrinePage() {
                     href={highlight.affiliateLink}
                     target="_blank"
                     rel="noopener noreferrer sponsored"
-                    className="mt-auto flex items-center justify-center gap-1.5 rounded-full bg-ink px-4 py-2.5 font-display font-stretch-condensed text-xs font-black tracking-wide text-gold uppercase italic transition hover:bg-gold hover:text-ink focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-white focus-visible:outline-none"
+                    className="group mt-auto flex items-center justify-center gap-2 rounded-xl bg-gold px-4 py-3 font-display font-stretch-condensed text-xs font-black tracking-wide text-ink uppercase italic shadow-[0_6px_14px_-6px_rgba(217,163,17,0.5)] transition hover:bg-gold-deep hover:shadow-[0_8px_18px_-6px_rgba(217,163,17,0.55)] focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:ring-offset-2 focus-visible:ring-offset-white focus-visible:outline-none"
                   >
                     Ver oferta
-                    <span aria-hidden="true">→</span>
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      className="size-3.5 shrink-0 transition-transform group-hover:translate-x-0.5"
+                    >
+                      <path
+                        d="M4 10h11.5M11 5.5 16 10l-5 4.5"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
                   </a>
                 </div>
               </div>
