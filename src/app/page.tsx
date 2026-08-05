@@ -64,11 +64,8 @@ export default async function VitrinePage() {
         ) : (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {highlights.map((highlight) => (
-              <a
+              <div
                 key={highlight.id}
-                href={highlight.affiliateLink}
-                target="_blank"
-                rel="noopener noreferrer sponsored"
                 className="flex flex-col overflow-hidden rounded-2xl border border-ink/10 bg-white shadow-[0_10px_24px_-14px_rgba(0,0,0,0.25)] transition hover:shadow-[0_14px_28px_-14px_rgba(0,0,0,0.35)]"
               >
                 <div className="bg-white p-3">
@@ -87,7 +84,7 @@ export default async function VitrinePage() {
                   <h2 className="line-clamp-2 text-sm leading-snug font-medium text-ink">
                     {highlight.title}
                   </h2>
-                  <div className="mt-auto flex items-baseline gap-2">
+                  <div className="flex items-baseline gap-2">
                     <span className="font-display font-stretch-condensed text-xl leading-none font-black tracking-tight text-ink tabular-nums">
                       {formatPrice(highlight.price)}
                     </span>
@@ -97,8 +94,17 @@ export default async function VitrinePage() {
                       </span>
                     )}
                   </div>
+                  <a
+                    href={highlight.affiliateLink}
+                    target="_blank"
+                    rel="noopener noreferrer sponsored"
+                    className="mt-auto flex items-center justify-center gap-1.5 rounded-full bg-ink px-4 py-2.5 font-display font-stretch-condensed text-xs font-black tracking-wide text-gold uppercase italic transition hover:bg-gold hover:text-ink focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-white focus-visible:outline-none"
+                  >
+                    Ver oferta
+                    <span aria-hidden="true">→</span>
+                  </a>
                 </div>
-              </a>
+              </div>
             ))}
           </div>
         )}
