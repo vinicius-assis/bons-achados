@@ -5,13 +5,20 @@ import {
   ADMIN_SESSION_MAX_AGE_SECONDS,
   createSessionToken,
 } from "@/lib/adminSession";
+import { getClientIp, isRateLimited, recordFailedLoginAttempt } from "@/lib/loginRateLimit";
 
 export async function POST(request: Request) {
+  const ip = getClientIp(request);
+  if (await isRateLimited(ip)) {
+    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+  }
+
   const body = await request.json().catch(() => null);
   const username = typeof body?.username === "string" ? body.username : "";
   const password = typeof body?.password === "string" ? body.password : "";
 
   if (!isValidAdminCredentials(username, password)) {
+    await recordFailedLoginAttempt(ip);
     return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
   }
 
