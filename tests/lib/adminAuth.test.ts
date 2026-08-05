@@ -28,4 +28,10 @@ describe("isValidAdminCredentials", () => {
     process.env.ADMIN_PASSWORD = "pass:word";
     expect(isValidAdminCredentials("admin", "pass:word")).toBe(true);
   });
+
+  it("returns false (without throwing) when the supplied password is a different length than the real one", () => {
+    process.env.ADMIN_PASSWORD = "a-fairly-long-password";
+    expect(() => isValidAdminCredentials("admin", "short")).not.toThrow();
+    expect(isValidAdminCredentials("admin", "short")).toBe(false);
+  });
 });
