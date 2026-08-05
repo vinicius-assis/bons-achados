@@ -62,6 +62,17 @@ describe("listTodaysHighlights", () => {
     expect(prisma.highlight.findMany).toHaveBeenCalledWith({
       where: { createdAt: { gte: new Date("2026-08-03T03:00:00.000Z") } }, // 00:00 BRT = 03:00 UTC
       orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        marketplace: true,
+        title: true,
+        affiliateLink: true,
+        image: true,
+        price: true,
+        oldPrice: true,
+        discount: true,
+        createdAt: true,
+      },
     });
   });
 });

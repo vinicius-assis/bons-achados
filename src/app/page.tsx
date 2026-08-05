@@ -15,6 +15,11 @@ export const metadata: Metadata = {
   description: "As melhores promoções do dia, selecionadas à mão.",
 };
 
+// This page reads live data via a direct Prisma call with no request-time API
+// (no cookies/headers/searchParams/fetch), so Next.js would otherwise prerender
+// it once at build time and freeze the HTML, hiding every future highlight.
+export const dynamic = "force-dynamic";
+
 function formatPrice(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }

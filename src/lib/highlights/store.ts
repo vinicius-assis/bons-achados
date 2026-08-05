@@ -20,6 +20,19 @@ export async function listTodaysHighlights(): Promise<Highlight[]> {
   return prisma.highlight.findMany({
     where: { createdAt: { gte: startOfTodayInBrazil() } },
     orderBy: { createdAt: "desc" },
+    // Explicit select so a future internal-only column added to Highlight
+    // isn't silently exposed on the public vitrine page.
+    select: {
+      id: true,
+      marketplace: true,
+      title: true,
+      affiliateLink: true,
+      image: true,
+      price: true,
+      oldPrice: true,
+      discount: true,
+      createdAt: true,
+    },
   });
 }
 
