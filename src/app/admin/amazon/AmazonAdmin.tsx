@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { parseDiscountPercentage } from "@/lib/mercadolivre/discountLabel";
+import { isValidNote } from "@/lib/highlights/note";
 
 type AmazonDealItem = {
   asin: string;
@@ -46,6 +47,7 @@ export default function AmazonAdmin() {
   const [selectedForPost, setSelectedForPost] = useState<Record<string, boolean>>({});
   const [highlightingAsin, setHighlightingAsin] = useState<string | null>(null);
   const [highlightedItems, setHighlightedItems] = useState<Record<string, boolean>>({});
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetch("/api/admin/amazon/session")
@@ -180,7 +182,7 @@ export default function AmazonAdmin() {
     }
   }
 
-  async function handleHighlight(item: AmazonDealItem) {
+  async function handleHighlight(item: AmazonDealItem, note: string) {
     setHighlightingAsin(item.asin);
     setLoadError(null);
     try {
@@ -190,6 +192,7 @@ export default function AmazonAdmin() {
         body: JSON.stringify({
           marketplace: "AMAZON",
           title: item.title,
+          note,
           affiliateLink: item.affiliateLink,
           image: item.image,
           price: item.price,
@@ -444,10 +447,28 @@ export default function AmazonAdmin() {
                             ? "Selecionando…"
                             : "Selecionar para postar"}
                       </button>
+                      {!highlightedItems[item.asin] && (
+                        <textarea
+                          value={noteDrafts[item.asin] ?? ""}
+                          onChange={(event) =>
+                            setNoteDrafts((previous) => ({
+                              ...previous,
+                              [item.asin]: event.target.value,
+                            }))
+                          }
+                          placeholder="Por que essa oferta vale a pena? (mín. 15 caracteres)"
+                          rows={2}
+                          className="mt-2 w-full resize-y rounded-xl border border-ink/15 bg-ink/[0.04] p-2 font-mono text-[11px] text-ink placeholder:text-ink/40 focus-visible:border-ink focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:outline-none"
+                        />
+                      )}
                       <button
                         type="button"
-                        onClick={() => handleHighlight(item)}
-                        disabled={highlightingAsin === item.asin || highlightedItems[item.asin]}
+                        onClick={() => handleHighlight(item, (noteDrafts[item.asin] ?? "").trim())}
+                        disabled={
+                          highlightingAsin === item.asin ||
+                          highlightedItems[item.asin] ||
+                          !isValidNote(noteDrafts[item.asin] ?? "")
+                        }
                         className="mt-2 w-full rounded-full border border-ink/15 bg-ink/[0.04] px-4 py-2 font-mono text-[10px] tracking-wider text-ink uppercase transition hover:bg-ink hover:text-gold focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {highlightedItems[item.asin]
