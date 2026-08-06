@@ -5,6 +5,7 @@ import { startOfTodayInBrazil } from "@/lib/date";
 export type CreateHighlightInput = {
   marketplace: Marketplace;
   title: string;
+  note: string;
   affiliateLink: string;
   image: string;
   price: number;
@@ -26,6 +27,7 @@ export async function listTodaysHighlights(): Promise<Highlight[]> {
       id: true,
       marketplace: true,
       title: true,
+      note: true,
       affiliateLink: true,
       image: true,
       price: true,

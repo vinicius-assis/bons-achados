@@ -21,6 +21,7 @@ import {
 const BASE_INPUT = {
   marketplace: "MERCADO_LIVRE" as const,
   title: "Creatina 1kg Suplemento",
+  note: "Testei e recomendo, ótimo custo-benefício.",
   affiliateLink: "https://meli.la/abc",
   image: "https://img.example/1.webp",
   price: 59.9,
@@ -66,6 +67,7 @@ describe("listTodaysHighlights", () => {
         id: true,
         marketplace: true,
         title: true,
+        note: true,
         affiliateLink: true,
         image: true,
         price: true,
