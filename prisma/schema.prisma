@@ -85,6 +85,7 @@ model Highlight {
   id            String      @id @default(cuid())
   marketplace   Marketplace
   title         String
+  note          String      @default("")
   affiliateLink String
   image         String
   price         Float
