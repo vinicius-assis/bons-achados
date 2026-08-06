@@ -146,6 +146,15 @@ export default async function VitrinePage() {
           </div>
         )}
       </main>
+
+      <footer className="border-t border-ink/10">
+        <div className="mx-auto max-w-5xl px-6 py-6">
+          <p className="text-xs text-ink/60">
+            Como participante do Programa de Associados da Amazon, ganho comissões por compras
+            qualificadas feitas através dos links deste site.
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }
