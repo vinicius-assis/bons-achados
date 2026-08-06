@@ -17,6 +17,7 @@ function authHeader() {
 const VALID_BODY = {
   marketplace: "MERCADO_LIVRE",
   title: "Creatina 1kg",
+  note: "Testei e recomendo, ótimo custo-benefício.",
   affiliateLink: "https://meli.la/abc",
   image: "https://img.example/1.webp",
   price: 59.9,
@@ -90,6 +91,22 @@ describe("POST /api/admin/highlights", () => {
     expect(createHighlight).not.toHaveBeenCalled();
   });
 
+  it("returns 400 when note is missing", async () => {
+    const { note, ...withoutNote } = VALID_BODY;
+    void note;
+    const response = await POST(buildRequest(withoutNote));
+
+    expect(response.status).toBe(400);
+    expect(createHighlight).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when note is shorter than the minimum length", async () => {
+    const response = await POST(buildRequest({ ...VALID_BODY, note: "curto" }));
+
+    expect(response.status).toBe(400);
+    expect(createHighlight).not.toHaveBeenCalled();
+  });
+
   it("creates a highlight and returns 201", async () => {
     vi.mocked(createHighlight).mockResolvedValue({ id: "hl1" } as never);
 
@@ -101,6 +118,7 @@ describe("POST /api/admin/highlights", () => {
     expect(createHighlight).toHaveBeenCalledWith({
       marketplace: "MERCADO_LIVRE",
       title: "Creatina 1kg",
+      note: "Testei e recomendo, ótimo custo-benefício.",
       affiliateLink: "https://meli.la/abc",
       image: "https://img.example/1.webp",
       price: 59.9,

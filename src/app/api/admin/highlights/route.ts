@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Marketplace } from "@prisma/client";
 import { isAuthorizedAdminRequest } from "@/lib/adminSession";
 import { createHighlight, listTodaysHighlights } from "@/lib/highlights/store";
+import { isValidNote } from "@/lib/highlights/note";
 
 const VALID_MARKETPLACES: Marketplace[] = ["MERCADO_LIVRE", "AMAZON", "SHOPEE"];
 
@@ -22,6 +23,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   const marketplace = body?.marketplace;
   const title = typeof body?.title === "string" ? body.title.trim() : "";
+  const note = typeof body?.note === "string" ? body.note.trim() : "";
   const affiliateLink = typeof body?.affiliateLink === "string" ? body.affiliateLink.trim() : "";
   const image = typeof body?.image === "string" ? body.image.trim() : "";
   const price = typeof body?.price === "number" ? body.price : NaN;
@@ -31,6 +33,7 @@ export async function POST(request: NextRequest) {
   if (
     !VALID_MARKETPLACES.includes(marketplace) ||
     !title ||
+    !isValidNote(note) ||
     !affiliateLink ||
     !image ||
     Number.isNaN(price) ||
@@ -43,6 +46,7 @@ export async function POST(request: NextRequest) {
   const created = await createHighlight({
     marketplace,
     title,
+    note,
     affiliateLink,
     image,
     price,
