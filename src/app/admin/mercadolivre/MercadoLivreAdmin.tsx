@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { parseDiscountPercentage } from "@/lib/mercadolivre/discountLabel";
+import { isValidNote } from "@/lib/highlights/note";
 
 type MLHubItem = {
   itemId: string;
@@ -73,6 +74,7 @@ export default function MercadoLivreAdmin() {
   const [selectedForPost, setSelectedForPost] = useState<Record<string, boolean>>({});
   const [highlightingItemId, setHighlightingItemId] = useState<string | null>(null);
   const [highlightedItems, setHighlightedItems] = useState<Record<string, boolean>>({});
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetch("/api/admin/mercadolivre/session")
@@ -268,7 +270,7 @@ export default function MercadoLivreAdmin() {
     }
   }
 
-  async function handleHighlight(item: MLHubItem, affiliateLink: string) {
+  async function handleHighlight(item: MLHubItem, affiliateLink: string, note: string) {
     setHighlightingItemId(item.itemId);
     setSearchError(null);
     try {
@@ -278,6 +280,7 @@ export default function MercadoLivreAdmin() {
         body: JSON.stringify({
           marketplace: "MERCADO_LIVRE",
           title: item.title,
+          note,
           affiliateLink,
           image: item.image,
           price: item.price,
@@ -609,11 +612,31 @@ export default function MercadoLivreAdmin() {
                                 : "Selecionar para postar"}
                           </button>
                         )}
+                        {generatedLink && !highlightedItems[item.itemId] && (
+                          <textarea
+                            value={noteDrafts[item.itemId] ?? ""}
+                            onChange={(event) =>
+                              setNoteDrafts((previous) => ({
+                                ...previous,
+                                [item.itemId]: event.target.value,
+                              }))
+                            }
+                            placeholder="Por que essa oferta vale a pena? (mín. 15 caracteres)"
+                            rows={2}
+                            className="mt-2 w-full resize-y rounded-xl border border-ink/15 bg-ink/[0.04] p-2 font-mono text-[11px] text-ink placeholder:text-ink/40 focus-visible:border-ink focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:outline-none"
+                          />
+                        )}
                         {generatedLink && (
                           <button
                             type="button"
-                            onClick={() => handleHighlight(item, generatedLink)}
-                            disabled={highlightingItemId === item.itemId || highlightedItems[item.itemId]}
+                            onClick={() =>
+                              handleHighlight(item, generatedLink, (noteDrafts[item.itemId] ?? "").trim())
+                            }
+                            disabled={
+                              highlightingItemId === item.itemId ||
+                              highlightedItems[item.itemId] ||
+                              !isValidNote(noteDrafts[item.itemId] ?? "")
+                            }
                             className="mt-2 w-full rounded-full border border-ink/15 bg-ink/[0.04] px-4 py-2 font-mono text-[10px] tracking-wider text-ink uppercase transition hover:bg-ink hover:text-gold focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             {highlightedItems[item.itemId]
