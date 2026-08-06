@@ -40,6 +40,9 @@ yarn-error.log*
 # harness-managed worktrees (not part of this repo's history)
 .claude/worktrees/
 
+# subagent-driven-development scratch workspace
+.superpowers/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
