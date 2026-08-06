@@ -132,6 +132,12 @@ export default function AdminDashboardPage() {
         >
           Produtos para postar →
         </Link>
+        <Link
+          href="/admin/amazon"
+          className="rounded-full border border-ink-line bg-ink-raised px-7 py-2.5 font-display font-stretch-condensed text-sm font-black tracking-wide text-paper uppercase italic transition hover:border-gold hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-ink focus-visible:outline-none"
+        >
+          Hub Amazon →
+        </Link>
       </div>
     </div>
   );
