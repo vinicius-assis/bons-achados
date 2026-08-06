@@ -103,9 +103,11 @@ export default async function VitrinePage() {
                   <h2 className="line-clamp-2 text-sm leading-snug font-medium text-ink">
                     {highlight.title}
                   </h2>
-                  <p className="line-clamp-3 text-xs leading-snug text-ink/70">
-                    {highlight.note}
-                  </p>
+                  {highlight.note && (
+                    <p className="line-clamp-3 text-xs leading-snug text-ink/70">
+                      {highlight.note}
+                    </p>
+                  )}
                   <div className="flex items-baseline gap-2">
                     <span className="font-display font-stretch-condensed text-xl leading-none font-black tracking-tight text-ink tabular-nums">
                       {formatPrice(highlight.price)}

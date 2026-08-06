@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { isValidNote } from "@/lib/highlights/note";
 
 type PostDraftItem = {
   id: string;
@@ -26,6 +27,7 @@ export default function PostarQueue() {
   const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
   const [highlightingId, setHighlightingId] = useState<string | null>(null);
   const [highlightedIds, setHighlightedIds] = useState<Record<string, boolean>>({});
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -89,7 +91,7 @@ export default function PostarQueue() {
     }
   }
 
-  async function handleHighlight(item: PostDraftItem) {
+  async function handleHighlight(item: PostDraftItem, note: string) {
     setHighlightingId(item.id);
     setError(null);
     try {
@@ -99,6 +101,7 @@ export default function PostarQueue() {
         body: JSON.stringify({
           marketplace: item.marketplace,
           title: item.title,
+          note,
           affiliateLink: item.affiliateLink,
           image: item.image,
           price: item.price,
@@ -176,10 +179,28 @@ export default function PostarQueue() {
                 </button>
               </div>
             </div>
+            {!highlightedIds[item.id] && (
+              <textarea
+                value={noteDrafts[item.id] ?? ""}
+                onChange={(event) =>
+                  setNoteDrafts((previous) => ({
+                    ...previous,
+                    [item.id]: event.target.value,
+                  }))
+                }
+                placeholder="Por que essa oferta vale a pena? (mín. 15 caracteres)"
+                rows={2}
+                className="mt-2 w-full resize-y rounded-xl border border-ink-line bg-ink p-2 font-mono text-[11px] text-paper placeholder:text-ash/60 focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
+              />
+            )}
             <button
               type="button"
-              onClick={() => handleHighlight(item)}
-              disabled={highlightingId === item.id || highlightedIds[item.id]}
+              onClick={() => handleHighlight(item, (noteDrafts[item.id] ?? "").trim())}
+              disabled={
+                highlightingId === item.id ||
+                highlightedIds[item.id] ||
+                !isValidNote(noteDrafts[item.id] ?? "")
+              }
               className="mt-2 w-full rounded-full border border-ink-line px-4 py-2 font-mono text-[10px] tracking-wider text-gold uppercase transition hover:bg-gold hover:text-ink focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
             >
               {highlightedIds[item.id]
