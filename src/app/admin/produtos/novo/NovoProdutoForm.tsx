@@ -1,18 +1,17 @@
 "use client";
 
 import { useState } from "react";
-
-type Marketplace = "AMAZON" | "SHOPEE";
+import { MIN_NOTE_LENGTH, isValidNote } from "@/lib/highlights/note";
 
 type Row = {
   key: number;
-  marketplace: Marketplace;
   title: string;
   affiliateLink: string;
   image: string;
   price: string;
   discount: string;
   category: string;
+  note: string;
 };
 
 type RowStatus = { kind: "idle" } | { kind: "saving" } | { kind: "saved"; category: string } | { kind: "duplicate" } | { kind: "error"; message: string };
@@ -23,13 +22,13 @@ function emptyRow(): Row {
   nextRowKey += 1;
   return {
     key: nextRowKey,
-    marketplace: "AMAZON",
     title: "",
     affiliateLink: "",
     image: "",
     price: "",
     discount: "",
     category: "",
+    note: "",
   };
 }
 
@@ -73,7 +72,7 @@ export default function NovoProdutoForm() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          marketplace: row.marketplace,
+          marketplace: "SHOPEE",
           source: "MANUAL",
           title: row.title,
           affiliateLink: row.affiliateLink,
@@ -108,6 +107,16 @@ export default function NovoProdutoForm() {
       }));
       return;
     }
+    if (!isValidNote(row.note)) {
+      setHighlightStatuses((previous) => ({
+        ...previous,
+        [row.key]: {
+          kind: "error",
+          message: `Escreva uma nota com pelo menos ${MIN_NOTE_LENGTH} caracteres.`,
+        },
+      }));
+      return;
+    }
 
     setHighlightStatuses((previous) => ({ ...previous, [row.key]: { kind: "saving" } }));
     try {
@@ -115,8 +124,9 @@ export default function NovoProdutoForm() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          marketplace: row.marketplace,
+          marketplace: "SHOPEE",
           title: row.title,
+          note: row.note.trim(),
           affiliateLink: row.affiliateLink,
           image: row.image,
           price,
@@ -147,18 +157,6 @@ export default function NovoProdutoForm() {
         return (
           <div key={row.key} className="rounded-2xl border border-ink-line bg-ink-raised p-6">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <label className="block">
-                <span className="font-mono text-[11px] tracking-[0.18em] text-ash uppercase">Marketplace</span>
-                <select
-                  value={row.marketplace}
-                  onChange={(event) => updateRow(row.key, { marketplace: event.target.value as Marketplace })}
-                  className="mt-2 w-full rounded-full border border-ink-line bg-ink px-4 py-2.5 text-sm text-paper focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
-                >
-                  <option value="AMAZON">Amazon</option>
-                  <option value="SHOPEE">Shopee</option>
-                </select>
-              </label>
-
               <label className="block">
                 <span className="font-mono text-[11px] tracking-[0.18em] text-ash uppercase">Nome do produto</span>
                 <input
@@ -217,6 +215,19 @@ export default function NovoProdutoForm() {
                   onChange={(event) => updateRow(row.key, { category: event.target.value })}
                   placeholder="deixe em branco pra sugerir automaticamente"
                   className="mt-2 w-full rounded-full border border-ink-line bg-ink px-4 py-2.5 text-sm text-paper placeholder:text-ash/60 focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
+                />
+              </label>
+
+              <label className="block sm:col-span-2">
+                <span className="font-mono text-[11px] tracking-[0.18em] text-ash uppercase">
+                  Nota para a vitrine (obrigatória pra destacar)
+                </span>
+                <textarea
+                  value={row.note}
+                  onChange={(event) => updateRow(row.key, { note: event.target.value })}
+                  placeholder="Por que essa oferta vale a pena? (mín. 15 caracteres)"
+                  rows={2}
+                  className="mt-2 w-full resize-y rounded-xl border border-ink-line bg-ink p-3 text-sm text-paper placeholder:text-ash/60 focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
                 />
               </label>
             </div>

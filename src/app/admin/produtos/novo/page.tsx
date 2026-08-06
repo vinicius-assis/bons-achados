@@ -3,7 +3,7 @@ import NovoProdutoForm from "./NovoProdutoForm";
 
 export const metadata: Metadata = {
   title: "Cadastrar produto · Bons Achados",
-  description: "Cadastro manual de produtos Amazon/Shopee para o gerador de posts.",
+  description: "Cadastro manual de produtos Shopee para o gerador de posts.",
 };
 
 export default function NovoProdutoPage() {
@@ -16,8 +16,12 @@ export default function NovoProdutoPage() {
         Novo <span className="text-gold">produto</span>
       </h1>
       <p className="mt-3 max-w-2xl text-sm text-ash">
-        Amazon e Shopee ainda não têm coleta automática — cadastre aqui os produtos que
-        você já curou manualmente. Eles entram na fila de{" "}
+        Shopee ainda não tem coleta automática — cadastre aqui os produtos que você já
+        curou manualmente. Amazon agora é só pelo{" "}
+        <a href="/admin/amazon" className="text-gold underline decoration-gold/40 underline-offset-4">
+          hub de afiliados
+        </a>
+        . Eles entram na fila de{" "}
         <a href="/admin/postar" className="text-gold underline decoration-gold/40 underline-offset-4">
           produtos para postar
         </a>
