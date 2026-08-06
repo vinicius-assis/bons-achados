@@ -140,6 +140,9 @@ export default async function VitrinePage() {
                       />
                     </svg>
                   </a>
+                  <p className="text-center font-mono text-[10px] tracking-wider text-ink/50 uppercase">
+                    Link patrocinado
+                  </p>
                 </div>
               </div>
             ))}
@@ -150,8 +153,7 @@ export default async function VitrinePage() {
       <footer className="border-t border-ink/10">
         <div className="mx-auto max-w-5xl px-6 py-6">
           <p className="text-xs text-ink/60">
-            Como participante do Programa de Associados da Amazon, ganho comissões por compras
-            qualificadas feitas através dos links deste site.
+            Como associado da Amazon, eu recebo por compras qualificadas.
           </p>
         </div>
       </footer>
