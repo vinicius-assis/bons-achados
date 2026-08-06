@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { parseDiscountPercentage } from "@/lib/mercadolivre/discountLabel";
 import { isValidNote } from "@/lib/highlights/note";
+import { NOTE_TEMPLATES } from "@/lib/highlights/noteTemplates";
 
 type AmazonDealItem = {
   asin: string;
@@ -448,18 +449,39 @@ export default function AmazonAdmin() {
                             : "Selecionar para postar"}
                       </button>
                       {!highlightedItems[item.asin] && (
-                        <textarea
-                          value={noteDrafts[item.asin] ?? ""}
-                          onChange={(event) =>
-                            setNoteDrafts((previous) => ({
-                              ...previous,
-                              [item.asin]: event.target.value,
-                            }))
-                          }
-                          placeholder="Por que essa oferta vale a pena? (mín. 15 caracteres)"
-                          rows={2}
-                          className="mt-2 w-full resize-y rounded-xl border border-ink/15 bg-ink/[0.04] p-2 font-mono text-[11px] text-ink placeholder:text-ink/40 focus-visible:border-ink focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:outline-none"
-                        />
+                        <>
+                          <select
+                            value=""
+                            onChange={(event) => {
+                              const template = event.target.value;
+                              if (!template) {
+                                return;
+                              }
+                              setNoteDrafts((previous) => ({ ...previous, [item.asin]: template }));
+                              event.target.value = "";
+                            }}
+                            className="mt-2 w-full rounded-xl border border-ink/15 bg-ink/[0.04] p-2 font-mono text-[11px] text-ink focus-visible:border-ink focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:outline-none"
+                          >
+                            <option value="">Usar um modelo de nota…</option>
+                            {NOTE_TEMPLATES.map((template) => (
+                              <option key={template} value={template}>
+                                {template}
+                              </option>
+                            ))}
+                          </select>
+                          <textarea
+                            value={noteDrafts[item.asin] ?? ""}
+                            onChange={(event) =>
+                              setNoteDrafts((previous) => ({
+                                ...previous,
+                                [item.asin]: event.target.value,
+                              }))
+                            }
+                            placeholder="Por que essa oferta vale a pena? (mín. 15 caracteres)"
+                            rows={2}
+                            className="mt-2 w-full resize-y rounded-xl border border-ink/15 bg-ink/[0.04] p-2 font-mono text-[11px] text-ink placeholder:text-ink/40 focus-visible:border-ink focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:outline-none"
+                          />
+                        </>
                       )}
                       <button
                         type="button"

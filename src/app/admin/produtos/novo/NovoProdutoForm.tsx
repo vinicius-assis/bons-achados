@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { MIN_NOTE_LENGTH, isValidNote } from "@/lib/highlights/note";
+import { NOTE_TEMPLATES } from "@/lib/highlights/noteTemplates";
 
 type Row = {
   key: number;
@@ -222,6 +223,25 @@ export default function NovoProdutoForm() {
                 <span className="font-mono text-[11px] tracking-[0.18em] text-ash uppercase">
                   Nota para a vitrine (obrigatória pra destacar)
                 </span>
+                <select
+                  value=""
+                  onChange={(event) => {
+                    const template = event.target.value;
+                    if (!template) {
+                      return;
+                    }
+                    updateRow(row.key, { note: template });
+                    event.target.value = "";
+                  }}
+                  className="mt-2 w-full rounded-full border border-ink-line bg-ink px-4 py-2.5 text-sm text-paper focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
+                >
+                  <option value="">Usar um modelo de nota…</option>
+                  {NOTE_TEMPLATES.map((template) => (
+                    <option key={template} value={template}>
+                      {template}
+                    </option>
+                  ))}
+                </select>
                 <textarea
                   value={row.note}
                   onChange={(event) => updateRow(row.key, { note: event.target.value })}
