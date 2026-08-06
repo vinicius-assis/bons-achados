@@ -109,7 +109,11 @@ export async function listDeals(
   offset: number,
   session: AmazonHubSession
 ): Promise<{ items: AmazonDealItem[]; nextIndex: number | null }> {
-  const tag = process.env.AMAZON_AFFILIATE_TAG ?? "";
+  const tag = process.env.AMAZON_AFFILIATE_TAG;
+  if (!tag) {
+    throw new Error("AMAZON_AFFILIATE_TAG is not set");
+  }
+
   const params = new URLSearchParams({
     pageSize: String(PAGE_SIZE),
     startIndex: String(offset),

@@ -98,25 +98,38 @@ describe("listDeals", () => {
     });
   });
 
+  it("throws before calling fetch when AMAZON_AFFILIATE_TAG is not set", async () => {
+    delete process.env.AMAZON_AFFILIATE_TAG;
+    global.fetch = vi.fn();
+
+    await expect(listDeals(0, session)).rejects.toThrow("AMAZON_AFFILIATE_TAG is not set");
+
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it("throws AmazonSessionExpiredError on a 403 response", async () => {
+    process.env.AMAZON_AFFILIATE_TAG = "bonsachados0f-20";
     global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 403 } as Response);
 
     await expect(listDeals(0, session)).rejects.toThrow(AmazonSessionExpiredError);
   });
 
   it("throws AmazonSessionExpiredError on a 401 response", async () => {
+    process.env.AMAZON_AFFILIATE_TAG = "bonsachados0f-20";
     global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 401 } as Response);
 
     await expect(listDeals(0, session)).rejects.toThrow(AmazonSessionExpiredError);
   });
 
   it("throws a generic error on other non-ok statuses", async () => {
+    process.env.AMAZON_AFFILIATE_TAG = "bonsachados0f-20";
     global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500 } as Response);
 
     await expect(listDeals(0, session)).rejects.toThrow("Amazon deals search failed: 500");
   });
 
   it("throws AmazonSessionExpiredError when the body doesn't have a products array", async () => {
+    process.env.AMAZON_AFFILIATE_TAG = "bonsachados0f-20";
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -127,6 +140,7 @@ describe("listDeals", () => {
   });
 
   it("returns an empty array when products is empty", async () => {
+    process.env.AMAZON_AFFILIATE_TAG = "bonsachados0f-20";
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -140,6 +154,7 @@ describe("listDeals", () => {
   });
 
   it("drops a malformed product and keeps the valid ones instead of throwing", async () => {
+    process.env.AMAZON_AFFILIATE_TAG = "bonsachados0f-20";
     const broken = { asin: "B0BROKEN", title: null, price: {} };
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -157,6 +172,7 @@ describe("listDeals", () => {
   });
 
   it("passes an abort signal with a timeout to fetch", async () => {
+    process.env.AMAZON_AFFILIATE_TAG = "bonsachados0f-20";
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
