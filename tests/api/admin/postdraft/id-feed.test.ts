@@ -39,8 +39,13 @@ describe("GET /api/admin/postdraft/[id]/feed", () => {
     expect(response.status).toBe(404);
   });
 
-  it("composes and returns the feed slide JPEG", async () => {
-    vi.mocked(getPostDraftById).mockResolvedValue({ id: "cd1", image: "https://img.example/1.webp" } as never);
+  it("composes and returns the feed slide JPEG using imageTitle", async () => {
+    vi.mocked(getPostDraftById).mockResolvedValue({
+      id: "cd1",
+      image: "https://img.example/1.webp",
+      title: "Creatina 1kg",
+      imageTitle: "Creatina em Pó 1kg",
+    } as never);
     vi.mocked(fetchImageBuffer).mockResolvedValue(Buffer.from("product-image"));
     vi.mocked(composeFeedSlide).mockResolvedValue(Buffer.from("jpeg-bytes"));
 
@@ -51,6 +56,32 @@ describe("GET /api/admin/postdraft/[id]/feed", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("image/jpeg");
-    expect(composeFeedSlide).toHaveBeenCalledWith(Buffer.from("product-image"), Buffer.from("selo"));
+    expect(composeFeedSlide).toHaveBeenCalledWith(
+      Buffer.from("product-image"),
+      Buffer.from("selo"),
+      "Creatina em Pó 1kg"
+    );
+  });
+
+  it("falls back to title when imageTitle is null", async () => {
+    vi.mocked(getPostDraftById).mockResolvedValue({
+      id: "cd1",
+      image: "https://img.example/1.webp",
+      title: "Creatina 1kg",
+      imageTitle: null,
+    } as never);
+    vi.mocked(fetchImageBuffer).mockResolvedValue(Buffer.from("product-image"));
+    vi.mocked(composeFeedSlide).mockResolvedValue(Buffer.from("jpeg-bytes"));
+
+    await GET(
+      new NextRequest("http://localhost/api/admin/postdraft/cd1/feed", { headers: authHeader() }),
+      { params: Promise.resolve({ id: "cd1" }) }
+    );
+
+    expect(composeFeedSlide).toHaveBeenCalledWith(
+      Buffer.from("product-image"),
+      Buffer.from("selo"),
+      "Creatina 1kg"
+    );
   });
 });

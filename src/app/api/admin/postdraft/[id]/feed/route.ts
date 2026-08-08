@@ -17,7 +17,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   const productImage = await fetchImageBuffer(postDraft.image);
-  const jpeg = await composeFeedSlide(productImage, loadSelo());
+  const jpeg = await composeFeedSlide(productImage, loadSelo(), postDraft.imageTitle ?? postDraft.title);
 
   return new NextResponse(new Uint8Array(jpeg), {
     headers: {
