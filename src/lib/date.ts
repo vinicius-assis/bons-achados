@@ -9,3 +9,12 @@ export function startOfTodayInBrazil(now: Date = new Date()): Date {
   );
   return new Date(startOfDayBrazilMs - BRAZIL_UTC_OFFSET_MS);
 }
+
+export function formatBrazilTime(date: Date): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(date);
+}
