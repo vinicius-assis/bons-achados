@@ -709,7 +709,7 @@ export async function GET(request: NextRequest) {
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `npx vitest run tests/api/admin/shopee/search.test.ts`
-Expected: PASS (7 tests).
+Expected: PASS (6 tests).
 
 - [ ] **Step 5: Commit**
 
