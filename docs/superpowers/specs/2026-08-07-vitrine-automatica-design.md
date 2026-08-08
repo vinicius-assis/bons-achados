@@ -88,7 +88,7 @@ Model `Product` é removido do schema (zero referências no código).
 
 ## Pool de notas genéricas
 
-Lista fixa de ~50 notas curtas, sem menção a produto específico, em `src/lib/highlights/genericNotes.ts` — ex.: "Vale a pena conferir esse preço antes que a oferta acabe.", "Selecionamos essa oferta pelo bom custo-benefício.", "Oferta com boa relação entre preço e avaliação dos compradores." (lista final de 50 escrita na fase de implementação). Sorteio aleatório simples (`Math.random()` sobre o array) a cada item novo — não precisa ser determinístico.
+`src/lib/highlights/noteTemplates.ts` já existe (10 notas genéricas, hoje usadas como sugestões no dropdown do textarea manual que está sendo removido) — é expandido para ~50 entradas e ganha uma função `pickRandomNote(): string` (sorteio simples via `Math.random()` sobre o array, não precisa ser determinístico). Reaproveita o arquivo existente em vez de criar um novo; o conteúdo das notas continua sem menção a produto específico (mesmo espírito das 10 atuais).
 
 ## Lista de termos de busca (ML / Shopee)
 
@@ -96,10 +96,10 @@ Lista fixa em `src/lib/collect/searchTerms.ts`, ~15-20 categorias genéricas de 
 
 ## Pipeline de coleta (`src/lib/collect/`)
 
-- `collectAmazon(): Promise<CollectResult>` — pagina `listDeals` (já existe em `src/lib/amazon/hubClient.ts`) até acumular 50 itens ou esgotar páginas.
-- `collectMercadoLivre(): Promise<CollectResult>` — sorteia termo, chama `search` do hub ML existente.
-- `collectShopee(): Promise<CollectResult>` — sorteia termo, chama `searchProducts` do hub Shopee existente.
-- `persistItems(marketplace, items): Promise<{inserted: number; skipped: number}>` — função compartilhada pelos três: filtra (imagem + preço > 0), dedup via `@@unique([marketplace, productId])` (upsert com `skipDuplicates` ou `createMany` ignorando conflito — decidir na implementação qual API do Prisma cabe melhor), atribui nota sorteada, grava.
+- `collectAmazon(): Promise<CollectResult>` — pagina `listDeals` (já existe em `src/lib/amazon/hubClient.ts`) até acumular 50 itens ou esgotar páginas; `discount` via `parseDiscountPercentage(item.discountLabel)` (já existe em `src/lib/mercadolivre/discountLabel.ts`, reaproveitado — já é o padrão hoje).
+- `collectMercadoLivre(): Promise<CollectResult>` — sorteia termo, chama `searchAffiliateProducts` do hub ML existente; para cada item que ainda não existe em `Highlight` (checado antes de gastar uma chamada de rede), chama `createAffiliateLink` (já existe em `src/lib/mercadolivre/createLink.ts`) pra obter o link antes de persistir — ver seção "Particularidade do Mercado Livre" abaixo; `discount` via `parseDiscountPercentage(item.discountLabel)`.
+- `collectShopee(): Promise<CollectResult>` — sorteia termo, chama `searchProducts` do hub Shopee existente; `discount` já vem numérico (`item.discount`), sem parsing; `oldPrice` sempre `null` (mesmo padrão manual atual).
+- `persistItems(marketplace, items): Promise<{inserted: number; skipped: number}>` — função compartilhada pelos três: filtra (imagem + preço > 0, mesmo padrão já usado em `parseNode` do hub Shopee), dedup via `@@unique([marketplace, productId])` (upsert com `skipDuplicates` ou `createMany` ignorando conflito — decidir na implementação qual API do Prisma cabe melhor), atribui `pickRandomNote()`, grava.
 - `CollectResult = { attempted: number; inserted: number; skipped: number; error?: string }` por marketplace — usado tanto pelo cron quanto pelo carregamento automático do hub.
 
 `POST /api/cron/collect` (protegida por secret, mesmo padrão de `POSTDRAFT_CLEANUP_SECRET`): chama os três coletores em `Promise.allSettled` (um rejeitar não derruba os outros), loga cada resultado, retorna 200 com o resumo — mas se algum marketplace falhar (ex.: sessão expirada), essa falha é logada e o step do workflow correspondente é o que fica visível como erro no GitHub Actions (mecanismo exato de "falhar visivelmente por marketplace" decidido na implementação, ex.: resposta HTTP 207 com detalhe por marketplace, e o workflow YAML inspeciona o corpo).
@@ -129,6 +129,14 @@ Cada `AdminXAdmin.tsx` (ML/Amazon/Shopee):
 - "Selecionar para postar" inalterado.
 - Cada card do pool ganha um botão "Remover da vitrine" — chama `DELETE /api/admin/highlights/[id]`. Sem essa válvula de escape, um item ruim que passe pelo filtro mínimo ("só dados válidos") ficaria no ar até o corte das 5h do dia seguinte, sem nenhuma curadoria manual pra tirá-lo antes.
 
+## Particularidade do Mercado Livre: link gerado, não estático
+
+Diferente de Amazon (link determinístico: ASIN + tag) e Shopee (a busca já devolve `offerLink` pronto), o hub ML hoje não tem link de afiliado no resultado da busca — é preciso um passo manual separado ("Gerar link", que chama a API `createLink` da ML por item) antes de poder destacar ou postar um item.
+
+Como a coleta automática precisa gravar `Highlight.affiliateLink` sem intervenção humana, `collectMercadoLivre` chama `createLink` internamente para cada item novo (que ainda não existe em `Highlight`, ou seja, o dedup por `productId` evita gerar de novo um link para um item já coletado no ciclo atual) — antes de persistir. Consequência: o botão "Gerar link" e sua UI no hub ML deixam de fazer sentido (o link já vem pronto assim que o item aparece na tela, igual Amazon/Shopee), e são removidos, junto do model `MercadoLivreGeneratedLink` e da rota `POST /api/admin/mercadolivre/generate-link` (o dedup que essa tabela fazia — não gerar link duas vezes no mesmo dia — passa a acontecer via `@@unique([marketplace, productId])` do próprio `Highlight`).
+
+Risco operacional aceito: isso torna `collectMercadoLivre` mais lento e mais sujeito a falha que os outros dois marketplaces — até 50 chamadas de rede extra (uma por item novo) por ciclo, cada uma podendo falhar por sessão expirada. Mitigado pelo mesmo tratamento de erro isolado por marketplace já definido (uma falha aqui não trava Amazon/Shopee).
+
 ## Cron / limpeza (workflow único às 5h)
 
 `.github/workflows/highlights-cleanup.yml` (schedule ajustado): `cron: "0 8 * * *"` (5h America/Sao_Paulo = 8h UTC, fixo, sem DST — mesmo padrão dos workflows existentes). Dois steps sequenciais no mesmo job:
@@ -142,7 +150,8 @@ Cada `AdminXAdmin.tsx` (ML/Amazon/Shopee):
 - Botão "Destacar na vitrine" + textarea de nota nos três `*Admin.tsx`.
 - `POST /api/admin/highlights` (rota de criação manual) — a coleta automática/hub-search (`persistItems`) é o único caminho de escrita agora.
 - Página `/admin/vitrine` (tela de curadoria separada) — cada hub já mostra e permite remover os itens do seu próprio marketplace; `GET /api/admin/highlights` e `DELETE /api/admin/highlights/[id]` continuam existindo (moderação, ver seção "Hub admin"), só a tela dedicada some.
-- Model `Product` do schema (`prisma/schema.prisma`), enum `ProductSource` junto (só usado por `Product`).
+- Model `Product` do schema (`prisma/schema.prisma`). O enum `ProductSource` **não** é removido — `PostDraft.source` também o usa.
+- Botão "Gerar link" e todo o fluxo de geração manual de link no hub ML, junto do model `MercadoLivreGeneratedLink` e da rota `POST /api/admin/mercadolivre/generate-link` — ver seção "Particularidade do Mercado Livre: link gerado, não estático" abaixo.
 
 ## Testes
 
