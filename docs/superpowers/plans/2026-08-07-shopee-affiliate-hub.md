@@ -71,7 +71,7 @@ describe("shopeeRequest", () => {
     const headers = init.headers as Record<string, string>;
     expect(headers["content-type"]).toBe("application/json");
     expect(headers["Authorization"]).toBe(
-      "SHA256 Credential=123456, Timestamp=1577836800, Signature=dc88d72feea70c80c52c3399751a7d34966763f51a7f056aa070a5e9df645412"
+      "SHA256 Credential=123456, Timestamp=1577836800, Signature=43a5dabcfb6598dfcaefc377088988228ddc512202fee19d2ceca1909cba60c6"
     );
   });
 
@@ -249,6 +249,8 @@ export async function shopeeRequest<T>(
 ```
 
 Note: `JSON.stringify({ query, variables })` drops the `variables` key entirely when `variables` is `undefined` — this is what makes the golden-example test's body match the documentation's payload exactly (the doc's example has no `variables` key).
+
+Note: the expected signature `43a5dabcfb6598dfcaefc377088988228ddc512202fee19d2ceca1909cba60c6` was independently verified with `sha256sum` against the exact factor string `123456` + `1577836800` + payload + `demo` — it does not match the value printed on Shopee's documentation page (`dc88d72feea70c80c52c3399751a7d34966763f51a7f056aa070a5e9df645412`), which appears to be a stale/incorrect example in their docs. The signing *algorithm* (`SHA256(AppId+Timestamp+Payload+Secret)`, hex lowercase) is unambiguous prose and not in question — only the doc's one printed example output is wrong.
 
 - [ ] **Step 4: Run tests to verify they pass**
 

@@ -170,7 +170,7 @@ SHOPEE_APP_SECRET="your-shopee-app-secret"
 ## Testes
 
 - `tests/shopee/client.test.ts`:
-  - Caso "padrão-ouro" da documentação: `AppId=123456`, `Secret=demo`, `Timestamp=1577836800`, payload fixo → assinatura exata `dc88d72feea70c80c52c3399751a7d34966763f51a7f056aa070a5e9df645412` (mockando `Date.now` para o timestamp bater).
+  - Caso "padrão-ouro" da documentação: `AppId=123456`, `Secret=demo`, `Timestamp=1577836800`, payload fixo → assinatura exata `43a5dabcfb6598dfcaefc377088988228ddc512202fee19d2ceca1909cba60c6` (mockando `Date.now` para o timestamp bater). Esse valor foi verificado de forma independente com `sha256sum`; o valor impresso na página da Shopee (`dc88d72f...`) está desatualizado/incorreto — o algoritmo em si (prosa da doc) não está em dúvida.
   - Lança erro antes de chamar `fetch` quando `SHOPEE_APP_ID`/`SHOPEE_APP_SECRET` ausentes.
   - Lança `ShopeeApiError` quando a resposta tem `errors[]` preenchido.
   - Lança `ShopeeApiError` em status não-200.
