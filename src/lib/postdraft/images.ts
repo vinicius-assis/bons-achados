@@ -31,9 +31,7 @@ const TITLE_START_FONT = 64;
 const TITLE_MIN_FONT = 36;
 const TITLE_FONT_STEP = 4;
 const TITLE_LINE_HEIGHT_RATIO = 1.2;
-const TITLE_FILL_COLOR = "#FFFFFF";
-const TITLE_STROKE_COLOR = "#0D1012";
-const TITLE_STROKE_WIDTH = 6;
+const TITLE_FILL_COLOR = "#0D1012";
 
 const FEED_SIZE = { width: 1080, height: 1350 };
 
@@ -193,20 +191,15 @@ function drawTitleLayer(title: string, canvasWidth: number, canvasHeight: number
   const { lines, fontSize } = fitTitleText(title, canvasWidth);
 
   ctx.font = `${fontSize}px "${FONT_FAMILY}"`;
-  ctx.textAlign = "center";
+  ctx.textAlign = "left";
   ctx.textBaseline = "top";
-  ctx.lineJoin = "round";
-  ctx.lineWidth = TITLE_STROKE_WIDTH;
-  ctx.strokeStyle = TITLE_STROKE_COLOR;
   ctx.fillStyle = TITLE_FILL_COLOR;
 
   const lineHeight = fontSize * TITLE_LINE_HEIGHT_RATIO;
-  const centerX = canvasWidth / 2;
 
   lines.forEach((line, index) => {
     const y = TITLE_TOP_MARGIN + index * lineHeight;
-    ctx.strokeText(line, centerX, y);
-    ctx.fillText(line, centerX, y);
+    ctx.fillText(line, TITLE_SIDE_MARGIN, y);
   });
 
   return canvas.toBuffer("image/png");
