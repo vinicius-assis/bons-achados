@@ -1,6 +1,8 @@
-// Starting points for the required highlight note — always meant to be
-// edited before saving, never used verbatim across many offers (that would
-// recreate the "conteúdo não original" problem this field exists to fix).
+// Starting points for the highlight note — a fixed pool sampled at random by
+// pickRandomNote(), reused verbatim across many offers. This trades away
+// per-offer originality for zero ongoing cost; if Amazon rejects the account
+// again for "conteúdo não original", revisit with per-item AI-generated
+// notes instead (see docs/superpowers/specs/2026-08-07-vitrine-automatica-design.md).
 export const NOTE_TEMPLATES: string[] = [
   "Um dos mais vendidos da categoria, muito elogiado pela qualidade.",
   "Ótimo custo-benefício para quem busca praticidade no dia a dia.",
@@ -12,4 +14,48 @@ export const NOTE_TEMPLATES: string[] = [
   "Boa pedida para quem quer praticidade sem abrir mão da qualidade.",
   "Um dos favoritos de quem já testou, custo-benefício excelente.",
   "Aproveita, esse é um item muito bem avaliado e queridinho da vez.",
+  "Preço em queda agora, vale a pena ficar de olho nessa oferta.",
+  "Um clássico da categoria, sempre bem avaliado por quem compra.",
+  "Direto dos mais vendidos, com ótima reputação entre os compradores.",
+  "Oferta que costuma sumir rápido, vale garantir logo.",
+  "Item versátil, serve tanto pro dia a dia quanto de presente.",
+  "Boa relação entre preço e qualidade, uma das melhores da categoria.",
+  "Selecionado por ter uma boa nota média e preço competitivo agora.",
+  "Sempre entre os mais procurados dessa categoria no marketplace.",
+  "Vale aproveitar enquanto o preço está assim, costuma variar bastante.",
+  "Um item essencial que sempre vale a pena ter por esse preço.",
+  "Recomendado por quem já comprou, ótima nota nas avaliações.",
+  "Uma opção sólida para quem procura esse tipo de produto agora.",
+  "Custo-benefício acima da média para essa faixa de preço.",
+  "Item com boa saída, sinal de que agrada bastante quem compra.",
+  "Vale a pena conferir, preço bem competitivo nesse momento.",
+  "Vale garantir agora, esse tipo de oferta não costuma durar muito.",
+  "Um produto útil pro dia a dia, com preço abaixo do costume.",
+  "Bem avaliado por quem já usa, uma boa pedida nessa faixa de preço.",
+  "Oferta interessante pra quem estava de olho nesse tipo de item.",
+  "Boa oportunidade pra quem procura algo assim com preço justo.",
+  "Item com avaliações consistentes, uma escolha segura por esse preço.",
+  "Uma das opções mais bem avaliadas da categoria no momento.",
+  "Preço convidativo pra quem já tinha esse item na lista de desejos.",
+  "Sempre um bom pedido dentro dessa categoria de produto.",
+  "Aproveita esse preço, costuma ser bem mais caro em condições normais.",
+  "Um item que vale a pena conhecer, boa reputação entre compradores.",
+  "Oportunidade boa pra fechar com um preço abaixo da média.",
+  "Escolha segura pra quem procura esse tipo de produto agora.",
+  "Combinação boa de preço e avaliação, vale a pena considerar.",
+  "Um dos itens mais buscados dessa categoria ultimamente.",
+  "Preço competitivo agora, uma boa chance de garantir o produto.",
+  "Produto com boa aceitação, sempre entre os mais pedidos.",
+  "Vale a pena aproveitar esse preço enquanto durar o estoque.",
+  "Vale a pena garantir, esse tipo de item costuma esgotar rápido.",
+  "Boa opção de custo-benefício pra quem está pesquisando esse item.",
+  "Item recomendado por quem já testou, avaliação bem positiva.",
+  "Preço bem atrativo comparado ao que costuma ser praticado.",
+  "Uma boa indicação pra quem estava esperando um preço assim.",
+  "Vale ficar de olho, esse preço costuma não durar muito tempo.",
+  "Produto com boa procura, sinal de que costuma valer a pena.",
 ];
+
+export function pickRandomNote(): string {
+  return NOTE_TEMPLATES[Math.floor(Math.random() * NOTE_TEMPLATES.length)];
+}
