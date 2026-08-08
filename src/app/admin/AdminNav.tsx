@@ -9,7 +9,6 @@ const LINKS = [
   { href: "/admin/amazon", label: "Hub Amazon" },
   { href: "/admin/shopee", label: "Hub Shopee" },
   { href: "/admin/postar", label: "Postar" },
-  { href: "/admin/vitrine", label: "Vitrine" },
 ];
 
 export default function AdminNav() {

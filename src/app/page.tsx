@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Archivo } from "next/font/google";
 import Image from "next/image";
-import { listTodaysHighlights } from "@/lib/highlights/store";
+import type { Marketplace } from "@prisma/client";
+import { listHighlightsPage } from "@/lib/highlights/store";
 import VitrineHighlights from "./VitrineHighlights";
 
 const archivo = Archivo({
@@ -17,12 +18,60 @@ export const metadata: Metadata = {
 };
 
 // This page reads live data via a direct Prisma call with no request-time API
-// (no cookies/headers/searchParams/fetch), so Next.js would otherwise prerender
-// it once at build time and freeze the HTML, hiding every future highlight.
+// (no cookies/headers/fetch), so Next.js would otherwise prerender it once at
+// build time and freeze the HTML, hiding every future highlight.
 export const dynamic = "force-dynamic";
 
-export default async function VitrinePage() {
-  const highlights = await listTodaysHighlights();
+const PAGE_SIZE = 30;
+const ALL_MARKETPLACES: Marketplace[] = ["MERCADO_LIVRE", "AMAZON", "SHOPEE"];
+const MARKETPLACE_LABEL: Record<Marketplace, string> = {
+  MERCADO_LIVRE: "Mercado Livre",
+  AMAZON: "Amazon",
+  SHOPEE: "Shopee",
+};
+
+type SearchParams = { [key: string]: string | string[] | undefined };
+
+function parseMarketplaces(searchParams: SearchParams): Marketplace[] {
+  if (searchParams.filtered !== "1") {
+    return ALL_MARKETPLACES;
+  }
+  const raw = searchParams.marketplace;
+  const values = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  return ALL_MARKETPLACES.filter((marketplace) => values.includes(marketplace));
+}
+
+function buildPageHref(page: number, marketplaces: Marketplace[], q: string, filtered: boolean): string {
+  const params = new URLSearchParams();
+  if (filtered) {
+    params.set("filtered", "1");
+    for (const marketplace of marketplaces) {
+      params.append("marketplace", marketplace);
+    }
+  }
+  if (q) {
+    params.set("q", q);
+  }
+  if (page > 1) {
+    params.set("page", String(page));
+  }
+  const query = params.toString();
+  return query ? `/?${query}` : "/";
+}
+
+export default async function VitrinePage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const params = await searchParams;
+  const filtered = params.filtered === "1";
+  const marketplaces = parseMarketplaces(params);
+  const q = typeof params.q === "string" ? params.q : "";
+  const rawPage = Number(Array.isArray(params.page) ? params.page[0] : params.page);
+  const page = Number.isFinite(rawPage) && rawPage > 1 ? Math.floor(rawPage) : 1;
+
+  const { items, hasNextPage } = await listHighlightsPage({ page, pageSize: PAGE_SIZE, marketplaces, q });
 
   return (
     <div className={`${archivo.variable} flex min-h-screen flex-col bg-paper font-body text-ink`}>
@@ -48,7 +97,65 @@ export default async function VitrinePage() {
       </header>
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-10">
-        <VitrineHighlights highlights={highlights} />
+        <form method="get" className="mb-8 flex flex-wrap items-center gap-x-6 gap-y-3">
+          <input type="hidden" name="filtered" value="1" />
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {ALL_MARKETPLACES.map((marketplace) => (
+              <label key={marketplace} className="flex items-center gap-2 text-sm text-ink/80">
+                <input
+                  type="checkbox"
+                  name="marketplace"
+                  value={marketplace}
+                  defaultChecked={marketplaces.includes(marketplace)}
+                  className="size-4 rounded border-ink/30 text-ink focus-visible:ring-2 focus-visible:ring-ink/40"
+                />
+                {MARKETPLACE_LABEL[marketplace]}
+              </label>
+            ))}
+          </div>
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <label htmlFor="vitrine-q" className="sr-only">
+              Buscar por nome
+            </label>
+            <input
+              id="vitrine-q"
+              type="text"
+              name="q"
+              defaultValue={q}
+              placeholder="Buscar por nome…"
+              className="min-w-0 flex-1 rounded-full border border-ink/15 bg-white px-4 py-2 text-sm text-ink placeholder:text-ink/40 focus-visible:border-ink focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:outline-none"
+            />
+            <button
+              type="submit"
+              className="rounded-full bg-ink px-5 py-2 font-display font-stretch-condensed text-xs font-black tracking-wide text-gold uppercase italic transition hover:bg-ink-raised focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none"
+            >
+              Filtrar
+            </button>
+          </div>
+        </form>
+
+        <VitrineHighlights highlights={items} />
+
+        {(page > 1 || hasNextPage) && (
+          <div className="mt-10 flex items-center justify-center gap-4">
+            {page > 1 && (
+              <a
+                href={buildPageHref(page - 1, marketplaces, q, filtered)}
+                className="rounded-full border border-ink/15 px-5 py-2 font-mono text-xs tracking-wider text-ink uppercase transition hover:border-ink focus-visible:ring-2 focus-visible:ring-ink/40 focus-visible:outline-none"
+              >
+                Página anterior
+              </a>
+            )}
+            {hasNextPage && (
+              <a
+                href={buildPageHref(page + 1, marketplaces, q, filtered)}
+                className="rounded-full border border-ink/15 px-5 py-2 font-mono text-xs tracking-wider text-ink uppercase transition hover:border-ink focus-visible:ring-2 focus-visible:ring-ink/40 focus-visible:outline-none"
+              >
+                Próxima página
+              </a>
+            )}
+          </div>
+        )}
       </main>
 
       <footer className="border-t border-ink/10">

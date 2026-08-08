@@ -1,22 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { parseDiscountPercentage } from "@/lib/mercadolivre/discountLabel";
-import { isValidNote } from "@/lib/highlights/note";
-import { NOTE_TEMPLATES } from "@/lib/highlights/noteTemplates";
 
-type MLHubItem = {
-  itemId: string;
+type PoolItem = {
+  id: string;
+  productId: string;
   title: string;
+  affiliateLink: string;
+  image: string;
   price: number;
   oldPrice: number | null;
-  discountLabel: string | null;
-  rating: number | null;
-  soldLabel: string | null;
-  image: string;
-  permalink: string;
-  commissionLabel: string | null;
-  generatedLink: string | null;
+  discount: number | null;
 };
 
 function formatPrice(value: number): string {
@@ -26,23 +20,6 @@ function formatPrice(value: number): string {
 // Mercado Livre's hub doesn't return a total count or a "has more" flag —
 // a page shorter than this is treated as the last one.
 const PAGE_SIZE = 18;
-
-/**
- * The commission chip is drawn as the price tag from the logo mark: a notched
- * point on the left, a punched hole, slapped on at a slight angle.
- */
-function CommissionTag({ label }: { label: string }) {
-  return (
-    <span
-      className="pointer-events-none inline-flex -rotate-3 items-center gap-1.5 bg-gold py-1 pr-3 pl-4 font-display font-stretch-condensed text-[11px] font-black tracking-wide text-ink uppercase italic shadow-[0_2px_0_0_var(--color-gold-deep)]"
-      style={{ clipPath: "polygon(0 50%, 10px 0, 100% 0, 100% 100%, 10px 100%)" }}
-    >
-      <span className="size-[5px] rounded-full bg-ink/70" aria-hidden="true" />
-      <span className="sr-only">Comissão de</span>
-      <span className="whitespace-nowrap">{label}</span>
-    </span>
-  );
-}
 
 function StatusDot({ active }: { active: boolean }) {
   return (
@@ -61,21 +38,20 @@ export default function MercadoLivreAdmin() {
   const [sessionError, setSessionError] = useState<string | null>(null);
 
   const [query, setQuery] = useState("");
-  const [items, setItems] = useState<MLHubItem[]>([]);
-  const [searched, setSearched] = useState(false);
+  const [items, setItems] = useState<PoolItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [searched, setSearched] = useState(false);
   const [hasMore, setHasMore] = useState(false);
+  const [liveOffset, setLiveOffset] = useState(0);
+  const [lastQuery, setLastQuery] = useState("");
   const [searchError, setSearchError] = useState<string | null>(null);
 
-  const [generatingItemId, setGeneratingItemId] = useState<string | null>(null);
-  const [generatedLinks, setGeneratedLinks] = useState<Record<string, string>>({});
-  const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
-  const [selectingItemId, setSelectingItemId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [selectingId, setSelectingId] = useState<string | null>(null);
   const [selectedForPost, setSelectedForPost] = useState<Record<string, boolean>>({});
-  const [highlightingItemId, setHighlightingItemId] = useState<string | null>(null);
-  const [highlightedItems, setHighlightedItems] = useState<Record<string, boolean>>({});
-  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/mercadolivre/session")
@@ -87,7 +63,6 @@ export default function MercadoLivreAdmin() {
   const expireSession = useCallback(() => {
     setHasSession(false);
     setShowSessionForm(true);
-    // Surfaced in the session panel, since the results area unmounts with the session.
     setSessionError("A sessão do Mercado Livre expirou. Cole os cookies novamente.");
   }, []);
 
@@ -110,7 +85,6 @@ export default function MercadoLivreAdmin() {
       setHasSession(true);
       setShowSessionForm(false);
       setCurlCommand("");
-      setSearchError(null);
     } catch {
       setSessionError("Não deu para salvar a sessão. Verifique a conexão e tente de novo.");
     } finally {
@@ -118,49 +92,46 @@ export default function MercadoLivreAdmin() {
     }
   }
 
-  function mergeGeneratedLinks(fetchedItems: MLHubItem[]) {
-    setGeneratedLinks((previous) => {
-      const next = { ...previous };
-      for (const fetchedItem of fetchedItems) {
-        if (fetchedItem.generatedLink) {
-          next[fetchedItem.itemId] = fetchedItem.generatedLink;
-        }
-      }
-      return next;
-    });
-  }
+  // Loads the pool already collected for this marketplace — a database
+  // read, no live ML request, so it doesn't depend on hasSession.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoading(true);
+    fetch("/api/admin/highlights?marketplace=MERCADO_LIVRE")
+      .then((response) => response.json())
+      .then((body) => setItems(body.items ?? []))
+      .catch(() => setSearchError("Não deu para carregar os produtos já coletados."))
+      .finally(() => setLoading(false));
+  }, []);
 
-  const fetchPage = useCallback(
-    async (offset: number): Promise<MLHubItem[] | null> => {
-      const response = await fetch(
-        `/api/admin/mercadolivre/search?q=${encodeURIComponent(query)}&offset=${offset}`
-      );
-      if (response.status === 401) {
-        expireSession();
-        return null;
-      }
-      const body = await response.json();
-      if (!response.ok) {
-        throw new Error("search_failed");
-      }
-      return Array.isArray(body.items) ? body.items : [];
-    },
-    [query, expireSession]
-  );
-
-  const loadPage = useCallback(
-    async (offset: number, mode: "replace" | "append") => {
+  const fetchSearchPage = useCallback(
+    async (term: string, offset: number, mode: "replace" | "append") => {
       const setLoadingState = mode === "replace" ? setSearching : setLoadingMore;
       setLoadingState(true);
       setSearchError(null);
       try {
-        const fetchedItems = await fetchPage(offset);
-        if (fetchedItems === null) {
+        const response = await fetch(
+          `/api/admin/mercadolivre/search?q=${encodeURIComponent(term)}&offset=${offset}`
+        );
+        if (response.status === 401) {
+          expireSession();
           return;
         }
-        setItems((previous) => (mode === "replace" ? fetchedItems : [...previous, ...fetchedItems]));
-        mergeGeneratedLinks(fetchedItems);
-        setHasMore(fetchedItems.length >= PAGE_SIZE);
+        const body = await response.json();
+        if (!response.ok) {
+          throw new Error("search_failed");
+        }
+        const fetchedItems = body.items as PoolItem[];
+        setItems((previous) => {
+          if (mode === "replace") {
+            return fetchedItems;
+          }
+          const seenIds = new Set(previous.map((item) => item.id));
+          return [...previous, ...fetchedItems.filter((item) => !seenIds.has(item.id))];
+        });
+        setHasMore(body.fetchedCount >= PAGE_SIZE);
+        setLiveOffset(offset + body.fetchedCount);
+        setLastQuery(term);
         setSearched(true);
       } catch {
         setSearchError(
@@ -172,69 +143,20 @@ export default function MercadoLivreAdmin() {
         setLoadingState(false);
       }
     },
-    [fetchPage]
+    [expireSession]
   );
-
-  // Loads the default listing as soon as a session is available, the same
-  // way opening Mercado Livre's own affiliate hub shows items immediately —
-  // this is a one-shot "load on session ready" effect, not a live query
-  // sync, so it intentionally only depends on hasSession.
-  useEffect(() => {
-    if (!hasSession) {
-      return;
-    }
-    // Deferred to a microtask so the state updates inside loadPage happen
-    // outside the effect's synchronous body, not as its direct side effect.
-    queueMicrotask(() => {
-      void loadPage(0, "replace");
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasSession]);
 
   async function handleSearch(event: React.FormEvent) {
     event.preventDefault();
-    await loadPage(0, "replace");
+    await fetchSearchPage(query, 0, "replace");
   }
 
   async function handleLoadMore() {
-    await loadPage(items.length, "append");
+    await fetchSearchPage(lastQuery, liveOffset, "append");
   }
 
-  async function handleGenerateLink(item: MLHubItem) {
-    setGeneratingItemId(item.itemId);
-    setSearchError(null);
-    try {
-      const response = await fetch("/api/admin/mercadolivre/generate-link", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          itemId: item.itemId,
-          url: item.permalink,
-          title: item.title,
-        }),
-      });
-      if (response.status === 401) {
-        expireSession();
-        return;
-      }
-      const body = await response.json();
-      if (!response.ok) {
-        setSearchError(`Não deu para gerar o link de "${item.title}". Tente de novo.`);
-        return;
-      }
-      setGeneratedLinks((previous) => ({
-        ...previous,
-        [item.itemId]: body.affiliateLink,
-      }));
-    } catch {
-      setSearchError(`Não deu para gerar o link de "${item.title}". Tente de novo.`);
-    } finally {
-      setGeneratingItemId(null);
-    }
-  }
-
-  async function handleSelectForPost(item: MLHubItem, affiliateLink: string) {
-    setSelectingItemId(item.itemId);
+  async function handleSelectForPost(item: PoolItem) {
+    setSelectingId(item.id);
     setSearchError(null);
     try {
       const response = await fetch("/api/admin/postdraft", {
@@ -244,72 +166,50 @@ export default function MercadoLivreAdmin() {
           marketplace: "MERCADO_LIVRE",
           source: "AUTO",
           title: item.title,
-          affiliateLink,
+          affiliateLink: item.affiliateLink,
           image: item.image,
           price: item.price,
-          discount: parseDiscountPercentage(item.discountLabel),
+          discount: item.discount,
           category: null,
         }),
       });
-      if (response.status === 401) {
-        expireSession();
-        return;
-      }
       if (response.status === 409) {
-        setSelectedForPost((previous) => ({ ...previous, [item.itemId]: true }));
+        setSelectedForPost((previous) => ({ ...previous, [item.id]: true }));
         return;
       }
       if (!response.ok) {
         setSearchError(`Não deu para selecionar "${item.title}" para postar. Tente de novo.`);
         return;
       }
-      setSelectedForPost((previous) => ({ ...previous, [item.itemId]: true }));
+      setSelectedForPost((previous) => ({ ...previous, [item.id]: true }));
     } catch {
       setSearchError(`Não deu para selecionar "${item.title}" para postar. Tente de novo.`);
     } finally {
-      setSelectingItemId(null);
+      setSelectingId(null);
     }
   }
 
-  async function handleHighlight(item: MLHubItem, affiliateLink: string, note: string) {
-    setHighlightingItemId(item.itemId);
+  async function handleRemove(item: PoolItem) {
+    setRemovingId(item.id);
     setSearchError(null);
     try {
-      const response = await fetch("/api/admin/highlights", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          marketplace: "MERCADO_LIVRE",
-          title: item.title,
-          note,
-          affiliateLink,
-          image: item.image,
-          price: item.price,
-          oldPrice: item.oldPrice,
-          discount: parseDiscountPercentage(item.discountLabel),
-        }),
-      });
-      if (response.status === 401) {
-        expireSession();
-        return;
-      }
+      const response = await fetch(`/api/admin/highlights/${item.id}`, { method: "DELETE" });
       if (!response.ok) {
-        setSearchError(`Não deu para destacar "${item.title}" na vitrine. Tente de novo.`);
-        return;
+        throw new Error("remove_failed");
       }
-      setHighlightedItems((previous) => ({ ...previous, [item.itemId]: true }));
+      setItems((previous) => previous.filter((existing) => existing.id !== item.id));
     } catch {
-      setSearchError(`Não deu para destacar "${item.title}" na vitrine. Tente de novo.`);
+      setSearchError(`Não deu para remover "${item.title}" da vitrine. Tente de novo.`);
     } finally {
-      setHighlightingItemId(null);
+      setRemovingId(null);
     }
   }
 
-  async function handleCopy(itemId: string, link: string) {
+  async function handleCopy(id: string, link: string) {
     try {
       await navigator.clipboard.writeText(link);
-      setCopiedItemId(itemId);
-      window.setTimeout(() => setCopiedItemId(null), 2000);
+      setCopiedId(id);
+      window.setTimeout(() => setCopiedId(null), 2000);
     } catch {
       setSearchError("O navegador bloqueou a cópia. Selecione o link e copie na mão.");
     }
@@ -337,21 +237,16 @@ export default function MercadoLivreAdmin() {
       </div>
 
       <div className="mt-8">
-        {hasSession === null && (
-          <p className="font-mono text-sm text-ash">Verificando a sessão do Mercado Livre…</p>
-        )}
-
         {sessionFormVisible && (
           <section className="mb-10 rounded-2xl border border-ink-line bg-ink-raised p-6 sm:p-8">
             <h2 className="font-display font-stretch-condensed text-xl font-black tracking-tight text-gold uppercase italic">
               Conectar a sessão do Mercado Livre
             </h2>
             <p className="mt-2 max-w-2xl text-sm text-ash">
-              O hub de afiliados não tem API pública, então o painel reusa a sua sessão do
-              navegador. Ela costuma durar algumas horas.
+              A busca manual e a coleta automática reusam a sua sessão do navegador. Ela costuma
+              durar algumas horas.
             </p>
 
-            {/* A real sequence, so it is numbered. */}
             <ol className="mt-5 max-w-2xl space-y-3 text-sm text-paper/80">
               {[
                 <>
@@ -433,261 +328,163 @@ export default function MercadoLivreAdmin() {
         )}
 
         {hasSession && (
-          <>
-            <form
-              onSubmit={handleSearch}
-              className="flex flex-col gap-3 sm:flex-row sm:items-center"
+          <form onSubmit={handleSearch} className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <label htmlFor="ml-query" className="sr-only">
+              O que você procura
+            </label>
+            <input
+              id="ml-query"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="fone bluetooth, air fryer, cadeira gamer… (opcional — busca alimenta a vitrine na hora)"
+              className="min-w-0 flex-1 rounded-full border border-ink-line bg-ink-raised px-5 py-3 text-sm text-paper placeholder:text-ash/70 focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={searching}
+              className="rounded-full bg-gold px-7 py-3 font-display font-stretch-condensed text-sm font-black tracking-wide text-ink uppercase italic transition hover:bg-paper focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-ink focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <label htmlFor="ml-query" className="sr-only">
-                O que você procura
-              </label>
-              <input
-                id="ml-query"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="fone bluetooth, air fryer, cadeira gamer… (deixe em branco pra ver a listagem padrão)"
-                className="min-w-0 flex-1 rounded-full border border-ink-line bg-ink-raised px-5 py-3 text-sm text-paper placeholder:text-ash/70 focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
-              />
+              {searching ? "Buscando…" : "Buscar produtos"}
+            </button>
+            {!showSessionForm && (
               <button
-                type="submit"
-                disabled={searching}
-                className="rounded-full bg-gold px-7 py-3 font-display font-stretch-condensed text-sm font-black tracking-wide text-ink uppercase italic transition hover:bg-paper focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-ink focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                type="button"
+                onClick={() => setShowSessionForm(true)}
+                className="font-mono text-xs tracking-wider text-ash uppercase transition hover:text-paper focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none sm:ml-1"
               >
-                {searching ? "Buscando…" : "Listar produtos"}
+                Trocar sessão
               </button>
-              {!showSessionForm && (
-                <button
-                  type="button"
-                  onClick={() => setShowSessionForm(true)}
-                  className="font-mono text-xs tracking-wider text-ash uppercase transition hover:text-paper focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none sm:ml-1"
-                >
-                  Trocar sessão
-                </button>
-              )}
-            </form>
-
-            <p aria-live="polite" className="sr-only">
-              {searching ? "Buscando produtos" : `${items.length} produtos listados`}
-            </p>
-
-            {searchError && (
-              <p
-                role="alert"
-                className="mt-6 rounded-xl border border-alert/40 bg-alert/10 px-4 py-3 text-sm text-paper"
-              >
-                {searchError}
-              </p>
             )}
+          </form>
+        )}
 
-            {items.length > 0 && (
-              <p className="mt-8 font-mono text-[11px] tracking-[0.2em] text-ash uppercase">
-                {items.length} produto{items.length === 1 ? "" : "s"} · comissão em destaque
-              </p>
-            )}
+        <p aria-live="polite" className="mt-6 font-mono text-[11px] tracking-[0.2em] text-ash uppercase">
+          {loading || searching
+            ? "carregando…"
+            : items.length > 0
+              ? `${items.length} produto${items.length === 1 ? "" : "s"} na vitrine hoje`
+              : ""}
+        </p>
 
-            {searched && items.length === 0 && !searching && !searchError && (
-              <p className="mt-10 text-sm text-ash">
-                Nada encontrado para essa busca. Tente outro termo.
-              </p>
-            )}
+        {searchError && (
+          <p
+            role="alert"
+            className="mt-4 rounded-xl border border-alert/40 bg-alert/10 px-4 py-3 text-sm text-paper"
+          >
+            {searchError}
+          </p>
+        )}
 
-            {!searched && searching && (
-              <p className="mt-10 text-sm text-ash">Carregando a listagem do hub…</p>
-            )}
+        {!loading && !searching && searched && items.length === 0 && !searchError && (
+          <p className="mt-10 text-sm text-ash">Nada encontrado para essa busca. Tente outro termo.</p>
+        )}
 
-            {!searched && !searching && !searchError && (
-              <p className="mt-10 max-w-md text-sm text-ash">
-                Busque um termo para ver os produtos do hub com preço, desconto e comissão — e
-                gere o link de afiliado direto daqui.
-              </p>
-            )}
+        {!loading && !searching && !searched && items.length === 0 && !searchError && (
+          <p className="mt-10 text-sm text-ash">
+            Nenhum produto na vitrine ainda. A coleta automática roda a cada 20 minutos.
+          </p>
+        )}
 
-            <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {items.map((item, index) => {
-                const generatedLink = generatedLinks[item.itemId];
-                const isGenerating = generatingItemId === item.itemId;
-
-                return (
-                  <article
-                    key={item.itemId}
-                    style={{ animationDelay: `${Math.min(index, 11) * 35}ms` }}
-                    className="flex animate-sticker-in flex-col overflow-hidden rounded-2xl bg-paper text-ink shadow-[0_10px_24px_-14px_rgba(0,0,0,0.9)]"
-                  >
-                    <div className="relative bg-white p-3">
-                      {item.image ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={item.image}
-                          alt=""
-                          loading="lazy"
-                          className="mx-auto h-40 w-full object-contain"
-                        />
-                      ) : (
-                        <div className="flex h-40 items-center justify-center font-mono text-xs text-ash">
-                          sem imagem
-                        </div>
-                      )}
-                      {item.commissionLabel && (
-                        <div className="absolute top-3 right-0">
-                          <CommissionTag label={item.commissionLabel} />
-                        </div>
-                      )}
-                      {item.discountLabel && (
-                        <span className="absolute bottom-3 left-3 rounded-md bg-ink px-2 py-0.5 font-display font-stretch-condensed text-xs font-black text-gold italic">
-                          {item.discountLabel}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex flex-1 flex-col gap-3 border-t border-ink/10 p-4">
-                      <h2 className="line-clamp-2 text-sm leading-snug font-medium text-ink">
-                        {item.title}
-                      </h2>
-
-                      <div className="flex items-baseline gap-2">
-                        <span className="font-display font-stretch-condensed text-2xl leading-none font-black tracking-tight text-ink tabular-nums">
-                          {formatPrice(item.price)}
-                        </span>
-                        {item.oldPrice !== null && (
-                          <span className="font-mono text-xs text-ash line-through tabular-nums">
-                            {formatPrice(item.oldPrice)}
-                          </span>
-                        )}
-                      </div>
-
-                      {(item.rating !== null || item.soldLabel) && (
-                        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] text-ash">
-                          {item.rating !== null && (
-                            <span className="text-ink/70">
-                              <span aria-hidden="true" className="text-gold-deep">
-                                ★
-                              </span>{" "}
-                              {item.rating}
-                            </span>
-                          )}
-                          {item.soldLabel && <span>{item.soldLabel}</span>}
-                        </p>
-                      )}
-
-                      <div className="mt-auto pt-1">
-                        {generatedLink ? (
-                          <div className="rounded-xl border border-ink/15 bg-ink/[0.04] p-2">
-                            <div className="flex items-center gap-2">
-                              <input
-                                readOnly
-                                aria-label={`Link de afiliado de ${item.title}`}
-                                value={generatedLink}
-                                onFocus={(event) => event.currentTarget.select()}
-                                className="min-w-0 flex-1 bg-transparent font-mono text-[11px] text-ink focus-visible:outline-none"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => handleCopy(item.itemId, generatedLink)}
-                                className="shrink-0 rounded-full bg-ink px-3 py-1.5 font-mono text-[10px] tracking-wider text-gold uppercase transition hover:bg-ink-raised focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none"
-                              >
-                                {copiedItemId === item.itemId ? "Copiado" : "Copiar"}
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleGenerateLink(item)}
-                            disabled={isGenerating}
-                            className="w-full rounded-full bg-ink px-4 py-2.5 font-display font-stretch-condensed text-xs font-black tracking-wide text-gold uppercase italic transition hover:bg-gold hover:text-ink focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-paper focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-transparent disabled:text-ash disabled:ring-1 disabled:ring-ink/15 disabled:hover:bg-transparent disabled:hover:text-ash"
-                          >
-                            {isGenerating ? "Gerando…" : "Gerar link"}
-                          </button>
-                        )}
-                        {generatedLink && (
-                          <button
-                            type="button"
-                            onClick={() => handleSelectForPost(item, generatedLink)}
-                            disabled={selectingItemId === item.itemId || selectedForPost[item.itemId]}
-                            className="mt-2 w-full rounded-full border border-gold/40 px-4 py-2 font-mono text-[10px] tracking-wider text-gold uppercase transition hover:bg-gold hover:text-ink focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {selectedForPost[item.itemId]
-                              ? "Selecionado ✓"
-                              : selectingItemId === item.itemId
-                                ? "Selecionando…"
-                                : "Selecionar para postar"}
-                          </button>
-                        )}
-                        {generatedLink && !highlightedItems[item.itemId] && (
-                          <>
-                            <select
-                              value=""
-                              onChange={(event) => {
-                                const template = event.target.value;
-                                if (!template) {
-                                  return;
-                                }
-                                setNoteDrafts((previous) => ({ ...previous, [item.itemId]: template }));
-                                event.target.value = "";
-                              }}
-                              className="mt-2 w-full rounded-xl border border-ink/15 bg-ink/[0.04] p-2 font-mono text-[11px] text-ink focus-visible:border-ink focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:outline-none"
-                            >
-                              <option value="">Usar um modelo de nota…</option>
-                              {NOTE_TEMPLATES.map((template) => (
-                                <option key={template} value={template}>
-                                  {template}
-                                </option>
-                              ))}
-                            </select>
-                            <textarea
-                              value={noteDrafts[item.itemId] ?? ""}
-                              onChange={(event) =>
-                                setNoteDrafts((previous) => ({
-                                  ...previous,
-                                  [item.itemId]: event.target.value,
-                                }))
-                              }
-                              placeholder="Por que essa oferta vale a pena? (mín. 15 caracteres)"
-                              rows={2}
-                              className="mt-2 w-full resize-y rounded-xl border border-ink/15 bg-ink/[0.04] p-2 font-mono text-[11px] text-ink placeholder:text-ink/40 focus-visible:border-ink focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:outline-none"
-                            />
-                          </>
-                        )}
-                        {generatedLink && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleHighlight(item, generatedLink, (noteDrafts[item.itemId] ?? "").trim())
-                            }
-                            disabled={
-                              highlightingItemId === item.itemId ||
-                              highlightedItems[item.itemId] ||
-                              !isValidNote(noteDrafts[item.itemId] ?? "")
-                            }
-                            className="mt-2 w-full rounded-full border border-ink/15 bg-ink/[0.04] px-4 py-2 font-mono text-[10px] tracking-wider text-ink uppercase transition hover:bg-ink hover:text-gold focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {highlightedItems[item.itemId]
-                              ? "Na vitrine ✓"
-                              : highlightingItemId === item.itemId
-                                ? "Destacando…"
-                                : "Destacar na vitrine"}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-
-            {hasMore && (
-              <div className="mt-8 flex justify-center">
-                <button
-                  type="button"
-                  onClick={handleLoadMore}
-                  disabled={loadingMore}
-                  className="rounded-full border border-ink-line bg-ink-raised px-7 py-2.5 font-display font-stretch-condensed text-sm font-black tracking-wide text-paper uppercase italic transition hover:border-gold hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-ink focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {loadingMore ? "Carregando…" : "Carregar mais"}
-                </button>
+        <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {items.map((item, index) => (
+            <article
+              key={item.id}
+              style={{ animationDelay: `${Math.min(index, 11) * 35}ms` }}
+              className="flex animate-sticker-in flex-col overflow-hidden rounded-2xl bg-paper text-ink shadow-[0_10px_24px_-14px_rgba(0,0,0,0.9)]"
+            >
+              <div className="relative bg-white p-3">
+                {item.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={item.image}
+                    alt=""
+                    loading="lazy"
+                    className="mx-auto h-40 w-full object-contain"
+                  />
+                ) : (
+                  <div className="flex h-40 items-center justify-center font-mono text-xs text-ash">
+                    sem imagem
+                  </div>
+                )}
+                {item.discount !== null && (
+                  <span className="absolute bottom-3 left-3 rounded-md bg-ink px-2 py-0.5 font-display font-stretch-condensed text-xs font-black text-gold italic">
+                    {item.discount}% off
+                  </span>
+                )}
               </div>
-            )}
-          </>
+
+              <div className="flex flex-1 flex-col gap-3 border-t border-ink/10 p-4">
+                <h2 className="line-clamp-2 text-sm leading-snug font-medium text-ink">
+                  {item.title}
+                </h2>
+
+                <div className="flex items-baseline gap-2">
+                  <span className="font-display font-stretch-condensed text-2xl leading-none font-black tracking-tight text-ink tabular-nums">
+                    {formatPrice(item.price)}
+                  </span>
+                  {item.oldPrice !== null && (
+                    <span className="font-mono text-xs text-ash line-through tabular-nums">
+                      {formatPrice(item.oldPrice)}
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-auto pt-1">
+                  <div className="rounded-xl border border-ink/15 bg-ink/[0.04] p-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        readOnly
+                        aria-label={`Link de afiliado de ${item.title}`}
+                        value={item.affiliateLink}
+                        onFocus={(event) => event.currentTarget.select()}
+                        className="min-w-0 flex-1 bg-transparent font-mono text-[11px] text-ink focus-visible:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(item.id, item.affiliateLink)}
+                        className="shrink-0 rounded-full bg-ink px-3 py-1.5 font-mono text-[10px] tracking-wider text-gold uppercase transition hover:bg-ink-raised focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none"
+                      >
+                        {copiedId === item.id ? "Copiado" : "Copiar"}
+                      </button>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectForPost(item)}
+                    disabled={selectingId === item.id || selectedForPost[item.id]}
+                    className="mt-2 w-full rounded-full border border-gold/40 px-4 py-2 font-mono text-[10px] tracking-wider text-gold uppercase transition hover:bg-gold hover:text-ink focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {selectedForPost[item.id]
+                      ? "Selecionado ✓"
+                      : selectingId === item.id
+                        ? "Selecionando…"
+                        : "Selecionar para postar"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRemove(item)}
+                    disabled={removingId === item.id}
+                    className="mt-2 w-full rounded-full border border-alert/40 px-4 py-2 font-mono text-[10px] tracking-wider text-alert uppercase transition hover:bg-alert hover:text-paper focus-visible:ring-2 focus-visible:ring-alert focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {removingId === item.id ? "Removendo…" : "Remover da vitrine"}
+                  </button>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+
+        {hasMore && (
+          <div className="mt-8 flex justify-center">
+            <button
+              type="button"
+              onClick={handleLoadMore}
+              disabled={loadingMore}
+              className="rounded-full border border-ink-line bg-ink-raised px-7 py-2.5 font-display font-stretch-condensed text-sm font-black tracking-wide text-paper uppercase italic transition hover:border-gold hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-ink focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loadingMore ? "Carregando…" : "Carregar mais"}
+            </button>
+          </div>
         )}
       </div>
     </div>

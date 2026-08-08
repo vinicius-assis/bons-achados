@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/mercadolivre/session";
 import { searchAffiliateProducts, MercadoLivreSessionExpiredError } from "@/lib/mercadolivre/hubClient";
-import { findGeneratedTodayMap } from "@/lib/mercadolivre/createLink";
+import { mapMercadoLivreItems } from "@/lib/collect/mercadolivre";
+import { persistItems, findHighlightsByProductIds } from "@/lib/collect/persist";
 import { isAuthorizedAdminRequest } from "@/lib/adminSession";
+
+export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
   if (!isAuthorizedAdminRequest(request)) {
@@ -20,12 +23,10 @@ export async function GET(request: NextRequest) {
 
   try {
     const items = await searchAffiliateProducts(query, session, offset);
-    const generatedTodayMap = await findGeneratedTodayMap(items.map((item) => item.itemId));
-    const annotated = items.map((item) => ({
-      ...item,
-      generatedLink: generatedTodayMap.get(item.itemId) ?? null,
-    }));
-    return NextResponse.json({ items: annotated });
+    const mapped = await mapMercadoLivreItems(items, session);
+    await persistItems("MERCADO_LIVRE", mapped);
+    const rows = await findHighlightsByProductIds("MERCADO_LIVRE", items.map((item) => item.itemId));
+    return NextResponse.json({ items: rows, fetchedCount: items.length });
   } catch (error) {
     if (error instanceof MercadoLivreSessionExpiredError) {
       return NextResponse.json({ error: "session_expired" }, { status: 401 });

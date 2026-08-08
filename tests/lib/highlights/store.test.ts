@@ -14,12 +14,14 @@ import { prisma } from "@/lib/prisma";
 import {
   createHighlight,
   listTodaysHighlights,
+  listHighlightsPage,
   removeHighlight,
   deleteStaleHighlights,
 } from "@/lib/highlights/store";
 
 const BASE_INPUT = {
   marketplace: "MERCADO_LIVRE" as const,
+  productId: "MLB123",
   title: "Creatina 1kg Suplemento",
   note: "Testei e recomendo, ótimo custo-benefício.",
   affiliateLink: "https://meli.la/abc",
@@ -34,7 +36,7 @@ describe("createHighlight", () => {
     vi.clearAllMocks();
   });
 
-  it("creates a row with the given data", async () => {
+  it("creates a row with the given data, including productId", async () => {
     vi.mocked(prisma.highlight.create).mockResolvedValue({ id: "hl1", ...BASE_INPUT } as never);
 
     const result = await createHighlight(BASE_INPUT);
@@ -55,27 +57,119 @@ describe("listTodaysHighlights", () => {
     vi.clearAllMocks();
   });
 
-  it("lists rows created today, newest first", async () => {
+  it("lists all of today's rows (since the 5am cutoff), newest first, when no marketplace is given", async () => {
     vi.mocked(prisma.highlight.findMany).mockResolvedValue([] as never);
 
     await listTodaysHighlights();
 
     expect(prisma.highlight.findMany).toHaveBeenCalledWith({
-      where: { createdAt: { gte: new Date("2026-08-03T03:00:00.000Z") } }, // 00:00 BRT = 03:00 UTC
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        marketplace: true,
-        title: true,
-        note: true,
-        affiliateLink: true,
-        image: true,
-        price: true,
-        oldPrice: true,
-        discount: true,
-        createdAt: true,
-      },
+      where: { createdAt: { gte: new Date("2026-08-03T08:00:00.000Z") } }, // 05:00 BRT = 08:00 UTC
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     });
+  });
+
+  it("adds a marketplace filter when given", async () => {
+    vi.mocked(prisma.highlight.findMany).mockResolvedValue([] as never);
+
+    await listTodaysHighlights("AMAZON");
+
+    expect(prisma.highlight.findMany).toHaveBeenCalledWith({
+      where: {
+        createdAt: { gte: new Date("2026-08-03T08:00:00.000Z") },
+        marketplace: "AMAZON",
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+  });
+});
+
+describe("listHighlightsPage", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-03T15:00:00.000Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  it("queries page 1 with the given page size, marketplaces and cutoff", async () => {
+    vi.mocked(prisma.highlight.findMany).mockResolvedValue(
+      Array.from({ length: 5 }, (_, i) => ({ id: `hl${i}` })) as never
+    );
+
+    const result = await listHighlightsPage({
+      page: 1,
+      pageSize: 30,
+      marketplaces: ["MERCADO_LIVRE", "AMAZON", "SHOPEE"],
+      q: "",
+    });
+
+    expect(prisma.highlight.findMany).toHaveBeenCalledWith({
+      where: {
+        createdAt: { gte: new Date("2026-08-03T08:00:00.000Z") },
+        marketplace: { in: ["MERCADO_LIVRE", "AMAZON", "SHOPEE"] },
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: 0,
+      take: 31,
+    });
+    expect(result).toEqual({ items: expect.any(Array), hasNextPage: false });
+    expect(result.items).toHaveLength(5);
+  });
+
+  it("adds a case-insensitive title filter when q is given", async () => {
+    vi.mocked(prisma.highlight.findMany).mockResolvedValue([] as never);
+
+    await listHighlightsPage({ page: 1, pageSize: 30, marketplaces: ["AMAZON"], q: "fone" });
+
+    expect(prisma.highlight.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          createdAt: { gte: new Date("2026-08-03T08:00:00.000Z") },
+          marketplace: { in: ["AMAZON"] },
+          title: { contains: "fone", mode: "insensitive" },
+        },
+      })
+    );
+  });
+
+  it("skips to the right offset for page 2", async () => {
+    vi.mocked(prisma.highlight.findMany).mockResolvedValue([] as never);
+
+    await listHighlightsPage({ page: 2, pageSize: 30, marketplaces: ["AMAZON"], q: "" });
+
+    expect(prisma.highlight.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ skip: 30, take: 31 })
+    );
+  });
+
+  it("reports hasNextPage true when one extra row beyond pageSize comes back", async () => {
+    vi.mocked(prisma.highlight.findMany).mockResolvedValue(
+      Array.from({ length: 31 }, (_, i) => ({ id: `hl${i}` })) as never
+    );
+
+    const result = await listHighlightsPage({
+      page: 1,
+      pageSize: 30,
+      marketplaces: ["AMAZON"],
+      q: "",
+    });
+
+    expect(result.hasNextPage).toBe(true);
+    expect(result.items).toHaveLength(30);
+  });
+
+  it("returns an empty page with no marketplaces selected, without erroring", async () => {
+    vi.mocked(prisma.highlight.findMany).mockResolvedValue([] as never);
+
+    const result = await listHighlightsPage({ page: 1, pageSize: 30, marketplaces: [], q: "" });
+
+    expect(prisma.highlight.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ marketplace: { in: [] } }) })
+    );
+    expect(result).toEqual({ items: [], hasNextPage: false });
   });
 });
 
@@ -110,13 +204,13 @@ describe("deleteStaleHighlights", () => {
     vi.clearAllMocks();
   });
 
-  it("deletes rows created before the start of today in America/Sao_Paulo", async () => {
+  it("deletes rows created before today's 5am cutoff in America/Sao_Paulo", async () => {
     vi.mocked(prisma.highlight.deleteMany).mockResolvedValue({ count: 7 } as never);
 
     const count = await deleteStaleHighlights();
 
     expect(prisma.highlight.deleteMany).toHaveBeenCalledWith({
-      where: { createdAt: { lt: new Date("2026-08-03T03:00:00.000Z") } },
+      where: { createdAt: { lt: new Date("2026-08-03T08:00:00.000Z") } },
     });
     expect(count).toBe(7);
   });

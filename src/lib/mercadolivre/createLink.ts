@@ -1,4 +1,3 @@
-import { prisma } from "@/lib/prisma";
 import type { MLHubSession } from "@/lib/mercadolivre/session";
 import { MercadoLivreSessionExpiredError, BROWSER_LIKE_HEADERS } from "@/lib/mercadolivre/hubClient";
 
@@ -44,44 +43,4 @@ export async function createAffiliateLink(
   }
 
   return { shortUrl: result.short_url, longUrl: result.long_url };
-}
-
-export async function recordGeneratedLink(
-  mlItemId: string,
-  title: string,
-  affiliateLink: string
-): Promise<void> {
-  await prisma.mercadoLivreGeneratedLink.create({
-    data: { mlItemId, title, affiliateLink },
-  });
-}
-
-export async function wasGeneratedToday(mlItemId: string): Promise<boolean> {
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-
-  const row = await prisma.mercadoLivreGeneratedLink.findFirst({
-    where: { mlItemId, generatedAt: { gte: startOfToday } },
-  });
-
-  return row !== null;
-}
-
-export async function findGeneratedTodayMap(mlItemIds: string[]): Promise<Map<string, string>> {
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-
-  const rows = await prisma.mercadoLivreGeneratedLink.findMany({
-    where: { mlItemId: { in: mlItemIds }, generatedAt: { gte: startOfToday } },
-    orderBy: { generatedAt: "desc" },
-    select: { mlItemId: true, affiliateLink: true },
-  });
-
-  const map = new Map<string, string>();
-  for (const row of rows) {
-    if (!map.has(row.mlItemId)) {
-      map.set(row.mlItemId, row.affiliateLink);
-    }
-  }
-  return map;
 }

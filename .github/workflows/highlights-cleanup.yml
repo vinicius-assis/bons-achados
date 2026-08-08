@@ -2,7 +2,7 @@ name: Highlights cleanup
 
 on:
   schedule:
-    - cron: "0 3 * * *" # 00:00 America/Sao_Paulo (fixed UTC-3, no DST)
+    - cron: "0 8 * * *" # 05:00 America/Sao_Paulo (fixed UTC-3, no DST)
   workflow_dispatch: {}
 
 jobs:
@@ -13,3 +13,12 @@ jobs:
         run: |
           curl -sf -X POST "${{ secrets.APP_URL }}/api/cron/highlights-cleanup" \
             -H "Authorization: Bearer ${{ secrets.HIGHLIGHTS_CLEANUP_SECRET }}"
+      - name: Repopulate immediately after cleanup
+        run: |
+          response=$(curl -sf -X POST "${{ secrets.APP_URL }}/api/cron/collect" \
+            -H "Authorization: Bearer ${{ secrets.CRON_COLLECT_SECRET }}")
+          echo "$response"
+          if echo "$response" | grep -q '"error"'; then
+            echo "::error::One or more marketplaces failed to collect after cleanup"
+            exit 1
+          fi

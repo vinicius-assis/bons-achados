@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchProducts } from "@/lib/shopee/hubClient";
+import { mapShopeeItems } from "@/lib/collect/shopee";
+import { persistItems, findHighlightsByProductIds } from "@/lib/collect/persist";
 import { isAuthorizedAdminRequest } from "@/lib/adminSession";
 
 export async function GET(request: NextRequest) {
@@ -13,7 +15,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const { items, hasNextPage } = await searchProducts(keyword, page);
-    return NextResponse.json({ items, hasNextPage });
+    await persistItems("SHOPEE", mapShopeeItems(items));
+    const rows = await findHighlightsByProductIds("SHOPEE", items.map((item) => item.itemId));
+    return NextResponse.json({ items: rows, hasNextPage });
   } catch (error) {
     console.error("Shopee hub search failed:", error);
     return NextResponse.json({ error: "search_failed" }, { status: 502 });

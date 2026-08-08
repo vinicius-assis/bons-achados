@@ -1,19 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { parseDiscountPercentage } from "@/lib/mercadolivre/discountLabel";
-import { isValidNote } from "@/lib/highlights/note";
-import { NOTE_TEMPLATES } from "@/lib/highlights/noteTemplates";
 
-type AmazonDealItem = {
-  asin: string;
+type PoolItem = {
+  id: string;
+  productId: string;
   title: string;
+  affiliateLink: string;
+  image: string;
   price: number;
   oldPrice: number | null;
-  discountLabel: string | null;
-  image: string;
-  permalink: string;
-  affiliateLink: string;
+  discount: number | null;
 };
 
 function formatPrice(value: number): string {
@@ -36,19 +33,18 @@ export default function AmazonAdmin() {
   const [savingSession, setSavingSession] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
 
-  const [items, setItems] = useState<AmazonDealItem[]>([]);
+  const [items, setItems] = useState<PoolItem[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [nextOffset, setNextOffset] = useState<number | null>(null);
+  const [nextOffset, setNextOffset] = useState(0);
+  const [noMorePages, setNoMorePages] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [copiedAsin, setCopiedAsin] = useState<string | null>(null);
-  const [selectingAsin, setSelectingAsin] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [selectingId, setSelectingId] = useState<string | null>(null);
   const [selectedForPost, setSelectedForPost] = useState<Record<string, boolean>>({});
-  const [highlightingAsin, setHighlightingAsin] = useState<string | null>(null);
-  const [highlightedItems, setHighlightedItems] = useState<Record<string, boolean>>({});
-  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/amazon/session")
@@ -82,7 +78,6 @@ export default function AmazonAdmin() {
       setHasSession(true);
       setShowSessionForm(false);
       setCurlCommand("");
-      setLoadError(null);
     } catch {
       setSessionError("Não deu para salvar a sessão. Verifique a conexão e tente de novo.");
     } finally {
@@ -90,67 +85,52 @@ export default function AmazonAdmin() {
     }
   }
 
-  const fetchPage = useCallback(async (offset: number) => {
-    const response = await fetch(`/api/admin/amazon/deals?offset=${offset}`);
-    if (response.status === 401) {
-      expireSession();
-      return null;
-    }
-    const body = await response.json();
-    if (!response.ok) {
-      throw new Error("deals_failed");
-    }
-    return { items: body.items as AmazonDealItem[], nextIndex: body.nextIndex as number | null };
-  }, [expireSession]);
-
-  const loadPage = useCallback(
-    async (offset: number, mode: "replace" | "append") => {
-      const setLoadingState = mode === "replace" ? setLoading : setLoadingMore;
-      setLoadingState(true);
-      setLoadError(null);
-      try {
-        const page = await fetchPage(offset);
-        if (page === null) {
-          return;
-        }
-        setItems((previous) => (mode === "replace" ? page.items : [...previous, ...page.items]));
-        setNextOffset(page.items.length > 0 ? page.nextIndex : null);
-        setLoaded(true);
-      } catch {
-        setLoadError(
-          mode === "replace"
-            ? "A listagem falhou. Tente de novo em alguns segundos."
-            : "Não deu para carregar mais ofertas. Tente de novo em alguns segundos."
-        );
-      } finally {
-        setLoadingState(false);
-      }
-    },
-    [fetchPage]
-  );
-
-  // One-shot "load on session ready" effect, same pattern as the ML admin
-  // page — not a live query sync, so it intentionally only depends on
-  // hasSession.
+  // Loads the pool already collected for this marketplace — a database
+  // read, no live Amazon request, so it doesn't depend on hasSession.
   useEffect(() => {
-    if (!hasSession) {
-      return;
-    }
-    queueMicrotask(() => {
-      void loadPage(0, "replace");
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasSession]);
+    fetch("/api/admin/highlights?marketplace=AMAZON")
+      .then((response) => response.json())
+      .then((body) => {
+        setItems(body.items ?? []);
+        setLoaded(true);
+      })
+      .catch(() => setLoadError("Não deu para carregar as ofertas já coletadas."))
+      .finally(() => setLoading(false));
+  }, []);
 
   async function handleLoadMore() {
-    if (nextOffset === null) {
-      return;
+    setLoadingMore(true);
+    setLoadError(null);
+    try {
+      const response = await fetch(`/api/admin/amazon/deals?offset=${nextOffset}`);
+      if (response.status === 401) {
+        expireSession();
+        return;
+      }
+      const body = await response.json();
+      if (!response.ok) {
+        throw new Error("deals_failed");
+      }
+      const fetchedItems = body.items as PoolItem[];
+      setItems((previous) => {
+        const seenIds = new Set(previous.map((item) => item.id));
+        return [...previous, ...fetchedItems.filter((item) => !seenIds.has(item.id))];
+      });
+      if (body.nextIndex === null) {
+        setNoMorePages(true);
+      } else {
+        setNextOffset(body.nextIndex);
+      }
+      setLoaded(true);
+    } catch {
+      setLoadError("Não deu para carregar mais ofertas. Tente de novo em alguns segundos.");
+    } finally {
+      setLoadingMore(false);
     }
-    await loadPage(nextOffset, "append");
   }
 
-  async function handleSelectForPost(item: AmazonDealItem) {
-    setSelectingAsin(item.asin);
+  async function handleSelectForPost(item: PoolItem) {
+    setSelectingId(item.id);
     setLoadError(null);
     try {
       const response = await fetch("/api/admin/postdraft", {
@@ -163,61 +143,47 @@ export default function AmazonAdmin() {
           affiliateLink: item.affiliateLink,
           image: item.image,
           price: item.price,
-          discount: parseDiscountPercentage(item.discountLabel),
+          discount: item.discount,
           category: null,
         }),
       });
       if (response.status === 409) {
-        setSelectedForPost((previous) => ({ ...previous, [item.asin]: true }));
+        setSelectedForPost((previous) => ({ ...previous, [item.id]: true }));
         return;
       }
       if (!response.ok) {
         setLoadError(`Não deu para selecionar "${item.title}" para postar. Tente de novo.`);
         return;
       }
-      setSelectedForPost((previous) => ({ ...previous, [item.asin]: true }));
+      setSelectedForPost((previous) => ({ ...previous, [item.id]: true }));
     } catch {
       setLoadError(`Não deu para selecionar "${item.title}" para postar. Tente de novo.`);
     } finally {
-      setSelectingAsin(null);
+      setSelectingId(null);
     }
   }
 
-  async function handleHighlight(item: AmazonDealItem, note: string) {
-    setHighlightingAsin(item.asin);
+  async function handleRemove(item: PoolItem) {
+    setRemovingId(item.id);
     setLoadError(null);
     try {
-      const response = await fetch("/api/admin/highlights", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          marketplace: "AMAZON",
-          title: item.title,
-          note,
-          affiliateLink: item.affiliateLink,
-          image: item.image,
-          price: item.price,
-          oldPrice: item.oldPrice,
-          discount: parseDiscountPercentage(item.discountLabel),
-        }),
-      });
+      const response = await fetch(`/api/admin/highlights/${item.id}`, { method: "DELETE" });
       if (!response.ok) {
-        setLoadError(`Não deu para destacar "${item.title}" na vitrine. Tente de novo.`);
-        return;
+        throw new Error("remove_failed");
       }
-      setHighlightedItems((previous) => ({ ...previous, [item.asin]: true }));
+      setItems((previous) => previous.filter((existing) => existing.id !== item.id));
     } catch {
-      setLoadError(`Não deu para destacar "${item.title}" na vitrine. Tente de novo.`);
+      setLoadError(`Não deu para remover "${item.title}" da vitrine. Tente de novo.`);
     } finally {
-      setHighlightingAsin(null);
+      setRemovingId(null);
     }
   }
 
-  async function handleCopy(asin: string, link: string) {
+  async function handleCopy(id: string, link: string) {
     try {
       await navigator.clipboard.writeText(link);
-      setCopiedAsin(asin);
-      window.setTimeout(() => setCopiedAsin(null), 2000);
+      setCopiedId(id);
+      window.setTimeout(() => setCopiedId(null), 2000);
     } catch {
       setLoadError("O navegador bloqueou a cópia. Selecione o link e copie na mão.");
     }
@@ -243,18 +209,14 @@ export default function AmazonAdmin() {
       </div>
 
       <div className="mt-8">
-        {hasSession === null && (
-          <p className="font-mono text-sm text-ash">Verificando a sessão da Amazon…</p>
-        )}
-
         {sessionFormVisible && (
           <section className="mb-10 rounded-2xl border border-ink-line bg-ink-raised p-6 sm:p-8">
             <h2 className="font-display font-stretch-condensed text-xl font-black tracking-tight text-gold uppercase italic">
               Conectar a sessão da Amazon
             </h2>
             <p className="mt-2 max-w-2xl text-sm text-ash">
-              A página de ofertas do mês não tem API pública, então o painel reusa a sua sessão
-              do navegador. Ela costuma durar bastante tempo.
+              A coleta automática e o botão &quot;Carregar mais&quot; reusam a sua sessão do
+              navegador. Ela costuma durar bastante tempo.
             </p>
 
             <ol className="mt-5 max-w-2xl space-y-3 text-sm text-paper/80">
@@ -335,189 +297,140 @@ export default function AmazonAdmin() {
           </section>
         )}
 
-        {hasSession && (
-          <>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p aria-live="polite" className="font-mono text-[11px] tracking-[0.2em] text-ash uppercase">
-                {loading
-                  ? "carregando…"
-                  : items.length > 0
-                    ? `${items.length} oferta${items.length === 1 ? "" : "s"}`
-                    : ""}
-              </p>
-              {!showSessionForm && (
-                <button
-                  type="button"
-                  onClick={() => setShowSessionForm(true)}
-                  className="font-mono text-xs tracking-wider text-ash uppercase transition hover:text-paper focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none"
-                >
-                  Trocar sessão
-                </button>
-              )}
-            </div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p aria-live="polite" className="font-mono text-[11px] tracking-[0.2em] text-ash uppercase">
+            {loading
+              ? "carregando…"
+              : items.length > 0
+                ? `${items.length} oferta${items.length === 1 ? "" : "s"} na vitrine hoje`
+                : ""}
+          </p>
+          {hasSession && !showSessionForm && (
+            <button
+              type="button"
+              onClick={() => setShowSessionForm(true)}
+              className="font-mono text-xs tracking-wider text-ash uppercase transition hover:text-paper focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none"
+            >
+              Trocar sessão
+            </button>
+          )}
+        </div>
 
-            {loadError && (
-              <p
-                role="alert"
-                className="mt-6 rounded-xl border border-alert/40 bg-alert/10 px-4 py-3 text-sm text-paper"
-              >
-                {loadError}
-              </p>
-            )}
+        {loadError && (
+          <p
+            role="alert"
+            className="mt-6 rounded-xl border border-alert/40 bg-alert/10 px-4 py-3 text-sm text-paper"
+          >
+            {loadError}
+          </p>
+        )}
 
-            {loaded && items.length === 0 && !loading && !loadError && (
-              <p className="mt-10 text-sm text-ash">Nenhuma oferta disponível agora.</p>
-            )}
+        {loaded && items.length === 0 && !loading && !loadError && (
+          <p className="mt-10 text-sm text-ash">
+            Nenhuma oferta na vitrine ainda. A coleta automática roda a cada 20 minutos.
+          </p>
+        )}
 
-            {!loaded && loading && (
-              <p className="mt-10 text-sm text-ash">Carregando as ofertas do mês…</p>
-            )}
-
-            <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {items.map((item, index) => (
-                <article
-                  key={item.asin}
-                  style={{ animationDelay: `${Math.min(index, 11) * 35}ms` }}
-                  className="flex animate-sticker-in flex-col overflow-hidden rounded-2xl bg-paper text-ink shadow-[0_10px_24px_-14px_rgba(0,0,0,0.9)]"
-                >
-                  <div className="relative bg-white p-3">
-                    {item.image ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={item.image}
-                        alt=""
-                        loading="lazy"
-                        className="mx-auto h-40 w-full object-contain"
-                      />
-                    ) : (
-                      <div className="flex h-40 items-center justify-center font-mono text-xs text-ash">
-                        sem imagem
-                      </div>
-                    )}
-                    {item.discountLabel && (
-                      <span className="absolute bottom-3 left-3 rounded-md bg-ink px-2 py-0.5 font-display font-stretch-condensed text-xs font-black text-gold italic">
-                        {item.discountLabel}
-                      </span>
-                    )}
+        <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {items.map((item, index) => (
+            <article
+              key={item.id}
+              style={{ animationDelay: `${Math.min(index, 11) * 35}ms` }}
+              className="flex animate-sticker-in flex-col overflow-hidden rounded-2xl bg-paper text-ink shadow-[0_10px_24px_-14px_rgba(0,0,0,0.9)]"
+            >
+              <div className="relative bg-white p-3">
+                {item.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={item.image}
+                    alt=""
+                    loading="lazy"
+                    className="mx-auto h-40 w-full object-contain"
+                  />
+                ) : (
+                  <div className="flex h-40 items-center justify-center font-mono text-xs text-ash">
+                    sem imagem
                   </div>
-
-                  <div className="flex flex-1 flex-col gap-3 border-t border-ink/10 p-4">
-                    <h2 className="line-clamp-2 text-sm leading-snug font-medium text-ink">
-                      {item.title}
-                    </h2>
-
-                    <div className="flex items-baseline gap-2">
-                      <span className="font-display font-stretch-condensed text-2xl leading-none font-black tracking-tight text-ink tabular-nums">
-                        {formatPrice(item.price)}
-                      </span>
-                      {item.oldPrice !== null && (
-                        <span className="font-mono text-xs text-ash line-through tabular-nums">
-                          {formatPrice(item.oldPrice)}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="mt-auto pt-1">
-                      <div className="rounded-xl border border-ink/15 bg-ink/[0.04] p-2">
-                        <div className="flex items-center gap-2">
-                          <input
-                            readOnly
-                            aria-label={`Link de afiliado de ${item.title}`}
-                            value={item.affiliateLink}
-                            onFocus={(event) => event.currentTarget.select()}
-                            className="min-w-0 flex-1 bg-transparent font-mono text-[11px] text-ink focus-visible:outline-none"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleCopy(item.asin, item.affiliateLink)}
-                            className="shrink-0 rounded-full bg-ink px-3 py-1.5 font-mono text-[10px] tracking-wider text-gold uppercase transition hover:bg-ink-raised focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none"
-                          >
-                            {copiedAsin === item.asin ? "Copiado" : "Copiar"}
-                          </button>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleSelectForPost(item)}
-                        disabled={selectingAsin === item.asin || selectedForPost[item.asin]}
-                        className="mt-2 w-full rounded-full border border-gold/40 px-4 py-2 font-mono text-[10px] tracking-wider text-gold uppercase transition hover:bg-gold hover:text-ink focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {selectedForPost[item.asin]
-                          ? "Selecionado ✓"
-                          : selectingAsin === item.asin
-                            ? "Selecionando…"
-                            : "Selecionar para postar"}
-                      </button>
-                      {!highlightedItems[item.asin] && (
-                        <>
-                          <select
-                            value=""
-                            onChange={(event) => {
-                              const template = event.target.value;
-                              if (!template) {
-                                return;
-                              }
-                              setNoteDrafts((previous) => ({ ...previous, [item.asin]: template }));
-                              event.target.value = "";
-                            }}
-                            className="mt-2 w-full rounded-xl border border-ink/15 bg-ink/[0.04] p-2 font-mono text-[11px] text-ink focus-visible:border-ink focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:outline-none"
-                          >
-                            <option value="">Usar um modelo de nota…</option>
-                            {NOTE_TEMPLATES.map((template) => (
-                              <option key={template} value={template}>
-                                {template}
-                              </option>
-                            ))}
-                          </select>
-                          <textarea
-                            value={noteDrafts[item.asin] ?? ""}
-                            onChange={(event) =>
-                              setNoteDrafts((previous) => ({
-                                ...previous,
-                                [item.asin]: event.target.value,
-                              }))
-                            }
-                            placeholder="Por que essa oferta vale a pena? (mín. 15 caracteres)"
-                            rows={2}
-                            className="mt-2 w-full resize-y rounded-xl border border-ink/15 bg-ink/[0.04] p-2 font-mono text-[11px] text-ink placeholder:text-ink/40 focus-visible:border-ink focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:outline-none"
-                          />
-                        </>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => handleHighlight(item, (noteDrafts[item.asin] ?? "").trim())}
-                        disabled={
-                          highlightingAsin === item.asin ||
-                          highlightedItems[item.asin] ||
-                          !isValidNote(noteDrafts[item.asin] ?? "")
-                        }
-                        className="mt-2 w-full rounded-full border border-ink/15 bg-ink/[0.04] px-4 py-2 font-mono text-[10px] tracking-wider text-ink uppercase transition hover:bg-ink hover:text-gold focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {highlightedItems[item.asin]
-                          ? "Na vitrine ✓"
-                          : highlightingAsin === item.asin
-                            ? "Destacando…"
-                            : "Destacar na vitrine"}
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-
-            {nextOffset !== null && items.length > 0 && (
-              <div className="mt-8 flex justify-center">
-                <button
-                  type="button"
-                  onClick={handleLoadMore}
-                  disabled={loadingMore}
-                  className="rounded-full border border-ink-line bg-ink-raised px-7 py-2.5 font-display font-stretch-condensed text-sm font-black tracking-wide text-paper uppercase italic transition hover:border-gold hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-ink focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {loadingMore ? "Carregando…" : "Carregar mais"}
-                </button>
+                )}
+                {item.discount !== null && (
+                  <span className="absolute bottom-3 left-3 rounded-md bg-ink px-2 py-0.5 font-display font-stretch-condensed text-xs font-black text-gold italic">
+                    {item.discount}% off
+                  </span>
+                )}
               </div>
-            )}
-          </>
+
+              <div className="flex flex-1 flex-col gap-3 border-t border-ink/10 p-4">
+                <h2 className="line-clamp-2 text-sm leading-snug font-medium text-ink">
+                  {item.title}
+                </h2>
+
+                <div className="flex items-baseline gap-2">
+                  <span className="font-display font-stretch-condensed text-2xl leading-none font-black tracking-tight text-ink tabular-nums">
+                    {formatPrice(item.price)}
+                  </span>
+                  {item.oldPrice !== null && (
+                    <span className="font-mono text-xs text-ash line-through tabular-nums">
+                      {formatPrice(item.oldPrice)}
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-auto pt-1">
+                  <div className="rounded-xl border border-ink/15 bg-ink/[0.04] p-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        readOnly
+                        aria-label={`Link de afiliado de ${item.title}`}
+                        value={item.affiliateLink}
+                        onFocus={(event) => event.currentTarget.select()}
+                        className="min-w-0 flex-1 bg-transparent font-mono text-[11px] text-ink focus-visible:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(item.id, item.affiliateLink)}
+                        className="shrink-0 rounded-full bg-ink px-3 py-1.5 font-mono text-[10px] tracking-wider text-gold uppercase transition hover:bg-ink-raised focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none"
+                      >
+                        {copiedId === item.id ? "Copiado" : "Copiar"}
+                      </button>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectForPost(item)}
+                    disabled={selectingId === item.id || selectedForPost[item.id]}
+                    className="mt-2 w-full rounded-full border border-gold/40 px-4 py-2 font-mono text-[10px] tracking-wider text-gold uppercase transition hover:bg-gold hover:text-ink focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {selectedForPost[item.id]
+                      ? "Selecionado ✓"
+                      : selectingId === item.id
+                        ? "Selecionando…"
+                        : "Selecionar para postar"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRemove(item)}
+                    disabled={removingId === item.id}
+                    className="mt-2 w-full rounded-full border border-alert/40 px-4 py-2 font-mono text-[10px] tracking-wider text-alert uppercase transition hover:bg-alert hover:text-paper focus-visible:ring-2 focus-visible:ring-alert focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {removingId === item.id ? "Removendo…" : "Remover da vitrine"}
+                  </button>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+
+        {hasSession && !noMorePages && (
+          <div className="mt-8 flex justify-center">
+            <button
+              type="button"
+              onClick={handleLoadMore}
+              disabled={loadingMore}
+              className="rounded-full border border-ink-line bg-ink-raised px-7 py-2.5 font-display font-stretch-condensed text-sm font-black tracking-wide text-paper uppercase italic transition hover:border-gold hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-ink focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loadingMore ? "Carregando…" : "Carregar mais"}
+            </button>
+          </div>
         )}
       </div>
     </div>
