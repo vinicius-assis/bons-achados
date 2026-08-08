@@ -84,7 +84,7 @@ describe("createPostDraft", () => {
     expect(prisma.postDraft.findFirst).toHaveBeenCalledWith({
       where: {
         affiliateLink: BASE_INPUT.affiliateLink,
-        createdAt: { gte: new Date("2026-08-03T03:00:00.000Z") }, // 00:00 BRT = 03:00 UTC
+        createdAt: { gte: new Date("2026-08-03T08:00:00.000Z") }, // 05:00 BRT = 08:00 UTC
       },
       orderBy: { createdAt: "desc" },
     });
@@ -134,7 +134,7 @@ describe("deleteStalePostDrafts", () => {
     const count = await deleteStalePostDrafts();
 
     expect(prisma.postDraft.deleteMany).toHaveBeenCalledWith({
-      where: { createdAt: { lt: new Date("2026-08-03T03:00:00.000Z") } },
+      where: { createdAt: { lt: new Date("2026-08-03T08:00:00.000Z") } },
     });
     expect(count).toBe(7);
   });
