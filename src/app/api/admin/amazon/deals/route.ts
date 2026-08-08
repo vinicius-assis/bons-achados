@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/amazon/session";
 import { listDeals, AmazonSessionExpiredError } from "@/lib/amazon/hubClient";
+import { mapAmazonItems } from "@/lib/collect/amazon";
+import { persistItems, findHighlightsByProductIds } from "@/lib/collect/persist";
 import { isAuthorizedAdminRequest } from "@/lib/adminSession";
 
 export async function GET(request: NextRequest) {
@@ -18,7 +20,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const { items, nextIndex } = await listDeals(offset, session);
-    return NextResponse.json({ items, nextIndex });
+    await persistItems("AMAZON", mapAmazonItems(items));
+    const rows = await findHighlightsByProductIds("AMAZON", items.map((item) => item.asin));
+    return NextResponse.json({ items: rows, nextIndex });
   } catch (error) {
     if (error instanceof AmazonSessionExpiredError) {
       return NextResponse.json({ error: "session_expired" }, { status: 401 });
