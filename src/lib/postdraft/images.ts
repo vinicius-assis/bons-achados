@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
-import { createCanvas, GlobalFonts } from "@napi-rs/canvas";
+import { createCanvas, GlobalFonts, type SKRSContext2D } from "@napi-rs/canvas";
 
 const BRAND_KIT_DIR = path.join(process.cwd(), "assets/brand-kit");
 const FONT_PATH = path.join(process.cwd(), "assets/fonts/ArchivoBlack-Regular.ttf");
@@ -23,6 +23,17 @@ const BAR_HEIGHT = 262;
 
 const SELO_MARGIN_RATIO = 0.05;
 const SELO_SIZE_RATIO = 0.15;
+
+const TITLE_SIDE_MARGIN = 80;
+const TITLE_TOP_MARGIN = 90;
+const TITLE_MAX_LINES = 3;
+const TITLE_START_FONT = 64;
+const TITLE_MIN_FONT = 36;
+const TITLE_FONT_STEP = 4;
+const TITLE_LINE_HEIGHT_RATIO = 1.2;
+const TITLE_FILL_COLOR = "#FFFFFF";
+const TITLE_STROKE_COLOR = "#0D1012";
+const TITLE_STROKE_WIDTH = 6;
 
 const FEED_SIZE = { width: 1080, height: 1350 };
 
@@ -130,6 +141,85 @@ async function drawPricePill(canvasImage: Buffer, price: number): Promise<Buffer
   return sharp(canvasImage).composite([{ input: pillLayer }]).png().toBuffer();
 }
 
+function wrapTitleLines(ctx: SKRSContext2D, text: string, maxWidth: number): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (current && ctx.measureText(candidate).width > maxWidth) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) {
+    lines.push(current);
+  }
+
+  return lines;
+}
+
+export function fitTitleText(
+  title: string,
+  canvasWidth: number
+): { lines: string[]; fontSize: number } {
+  ensureFontRegistered();
+  const measureCanvas = createCanvas(canvasWidth, 1);
+  const ctx = measureCanvas.getContext("2d");
+  const maxTextWidth = canvasWidth - TITLE_SIDE_MARGIN * 2;
+
+  for (let fontSize = TITLE_START_FONT; fontSize >= TITLE_MIN_FONT; fontSize -= TITLE_FONT_STEP) {
+    ctx.font = `${fontSize}px "${FONT_FAMILY}"`;
+    const lines = wrapTitleLines(ctx, title, maxTextWidth);
+    if (lines.length <= TITLE_MAX_LINES) {
+      return { lines, fontSize };
+    }
+  }
+
+  ctx.font = `${TITLE_MIN_FONT}px "${FONT_FAMILY}"`;
+  return {
+    lines: wrapTitleLines(ctx, title, maxTextWidth).slice(0, TITLE_MAX_LINES),
+    fontSize: TITLE_MIN_FONT,
+  };
+}
+
+function drawTitleLayer(title: string, canvasWidth: number, canvasHeight: number): Buffer {
+  ensureFontRegistered();
+  const canvas = createCanvas(canvasWidth, canvasHeight);
+  const ctx = canvas.getContext("2d");
+  const { lines, fontSize } = fitTitleText(title, canvasWidth);
+
+  ctx.font = `${fontSize}px "${FONT_FAMILY}"`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.lineJoin = "round";
+  ctx.lineWidth = TITLE_STROKE_WIDTH;
+  ctx.strokeStyle = TITLE_STROKE_COLOR;
+  ctx.fillStyle = TITLE_FILL_COLOR;
+
+  const lineHeight = fontSize * TITLE_LINE_HEIGHT_RATIO;
+  const centerX = canvasWidth / 2;
+
+  lines.forEach((line, index) => {
+    const y = TITLE_TOP_MARGIN + index * lineHeight;
+    ctx.strokeText(line, centerX, y);
+    ctx.fillText(line, centerX, y);
+  });
+
+  return canvas.toBuffer("image/png");
+}
+
+async function pasteTitle(canvasImage: Buffer, title: string): Promise<Buffer> {
+  const metadata = await sharp(canvasImage).metadata();
+  const width = metadata.width ?? 0;
+  const height = metadata.height ?? 0;
+  const titleLayer = drawTitleLayer(title, width, height);
+  return sharp(canvasImage).composite([{ input: titleLayer }]).png().toBuffer();
+}
+
 async function pasteSelo(canvasImage: Buffer, seloImage: Buffer): Promise<Buffer> {
   const canvasMeta = await sharp(canvasImage).metadata();
   const canvasWidth = canvasMeta.width ?? 0;
@@ -148,7 +238,8 @@ async function pasteSelo(canvasImage: Buffer, seloImage: Buffer): Promise<Buffer
 export async function composeStory(
   productImage: Buffer,
   molduraImage: Buffer,
-  price: number
+  price: number,
+  title: string
 ): Promise<Buffer> {
   const molduraMeta = await sharp(molduraImage).metadata();
   const size = { width: molduraMeta.width ?? 1080, height: molduraMeta.height ?? 1920 };
@@ -156,12 +247,18 @@ export async function composeStory(
   let canvas = await fitOnCanvas(productImage, size);
   canvas = await pasteOverlay(canvas, molduraImage);
   canvas = await drawPricePill(canvas, price);
+  canvas = await pasteTitle(canvas, title);
 
   return sharp(canvas).jpeg({ quality: 90 }).toBuffer();
 }
 
-export async function composeFeedSlide(productImage: Buffer, seloImage: Buffer): Promise<Buffer> {
+export async function composeFeedSlide(
+  productImage: Buffer,
+  seloImage: Buffer,
+  title: string
+): Promise<Buffer> {
   let canvas = await fitOnCanvas(productImage, FEED_SIZE);
   canvas = await pasteSelo(canvas, seloImage);
+  canvas = await pasteTitle(canvas, title);
   return sharp(canvas).jpeg({ quality: 90 }).toBuffer();
 }
