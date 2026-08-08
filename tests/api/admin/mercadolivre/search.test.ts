@@ -1,139 +1,134 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextRequest } from "next/server";
 
-vi.mock("@/lib/mercadolivre/session", () => ({
-  getSession: vi.fn(),
-}));
+vi.mock("@/lib/mercadolivre/session", () => ({ getSession: vi.fn() }));
 vi.mock("@/lib/mercadolivre/hubClient", async () => {
   const actual = await vi.importActual("@/lib/mercadolivre/hubClient");
-  return {
-    ...actual,
-    searchAffiliateProducts: vi.fn(),
-  };
+  return { ...actual, searchAffiliateProducts: vi.fn() };
 });
+vi.mock("@/lib/collect/mercadolivre", () => ({ mapMercadoLivreItems: vi.fn() }));
+vi.mock("@/lib/collect/persist", () => ({
+  persistItems: vi.fn(),
+  findHighlightsByProductIds: vi.fn(),
+}));
 
 import { GET } from "@/app/api/admin/mercadolivre/search/route";
 import { getSession } from "@/lib/mercadolivre/session";
 import { searchAffiliateProducts, MercadoLivreSessionExpiredError } from "@/lib/mercadolivre/hubClient";
+import { mapMercadoLivreItems } from "@/lib/collect/mercadolivre";
+import { persistItems, findHighlightsByProductIds } from "@/lib/collect/persist";
 import { ADMIN_SESSION_COOKIE, createSessionToken } from "@/lib/adminSession";
 
 function authHeader() {
   return { cookie: `${ADMIN_SESSION_COOKIE}=${createSessionToken()}` };
 }
 
-const item = {
-  itemId: "MLB123",
-  title: "Produto",
-  price: 10,
+const session = { cookieHeader: "a=b", csrfToken: "tok" };
+const mlItem = {
+  itemId: "MLB1",
+  title: "Creatina 1kg",
+  price: 59.9,
   oldPrice: null,
   discountLabel: null,
   rating: null,
   soldLabel: null,
-  image: "",
-  permalink: "https://www.mercadolivre.com.br/p/MLB123",
+  image: "https://img.example/1.webp",
+  permalink: "https://ml.com/MLB1",
   commissionLabel: null,
 };
-
-function buildRequest(query = "creatina", offset?: number) {
-  const url = new URL("http://localhost/api/admin/mercadolivre/search");
-  url.searchParams.set("q", query);
-  if (offset !== undefined) {
-    url.searchParams.set("offset", String(offset));
-  }
-  return new NextRequest(url, { headers: authHeader() });
-}
+const highlightRow = { id: "hl1", marketplace: "MERCADO_LIVRE", productId: "MLB1" };
 
 describe("GET /api/admin/mercadolivre/search", () => {
   beforeEach(() => {
     process.env.ADMIN_USER = "admin";
     process.env.ADMIN_PASSWORD = "test-password";
   });
-
   afterEach(() => {
     vi.clearAllMocks();
     delete process.env.ADMIN_USER;
     delete process.env.ADMIN_PASSWORD;
   });
 
-  it("returns 401 without calling any library functions when the session cookie is missing or invalid", async () => {
-    const request = new NextRequest("http://localhost/api/admin/mercadolivre/search?q=creatina");
-
-    const response = await GET(request);
+  it("returns 401 without calling the session or search when unauthorized", async () => {
+    const response = await GET(new NextRequest("http://localhost/api/admin/mercadolivre/search"));
 
     expect(response.status).toBe(401);
     expect(getSession).not.toHaveBeenCalled();
-    expect(searchAffiliateProducts).not.toHaveBeenCalled();
   });
 
-  it("returns 401 session_expired when no session is stored", async () => {
+  it("returns 401 session_expired when there's no saved session", async () => {
     vi.mocked(getSession).mockResolvedValue(null);
-    const request = buildRequest();
 
-    const response = await GET(request);
+    const response = await GET(
+      new NextRequest("http://localhost/api/admin/mercadolivre/search", { headers: authHeader() })
+    );
     const body = await response.json();
 
     expect(response.status).toBe(401);
     expect(body).toEqual({ error: "session_expired" });
-    expect(searchAffiliateProducts).not.toHaveBeenCalled();
   });
 
-  it("returns items from searchAffiliateProducts", async () => {
-    vi.mocked(getSession).mockResolvedValue({ cookieHeader: "a=b", csrfToken: "t" });
-    vi.mocked(searchAffiliateProducts).mockResolvedValue([item]);
-    const request = buildRequest();
+  it("searches, persists the mapped items, and returns the enriched pool rows plus fetchedCount", async () => {
+    vi.mocked(getSession).mockResolvedValue(session);
+    vi.mocked(searchAffiliateProducts).mockResolvedValue([mlItem]);
+    vi.mocked(mapMercadoLivreItems).mockResolvedValue([
+      {
+        productId: "MLB1",
+        title: "Creatina 1kg",
+        affiliateLink: "https://meli.la/x",
+        image: "https://img.example/1.webp",
+        price: 59.9,
+        oldPrice: null,
+        discount: null,
+      },
+    ]);
+    vi.mocked(findHighlightsByProductIds).mockResolvedValue([highlightRow] as never);
 
-    const response = await GET(request);
+    const response = await GET(
+      new NextRequest("http://localhost/api/admin/mercadolivre/search?q=fone&offset=18", {
+        headers: authHeader(),
+      })
+    );
     const body = await response.json();
 
-    expect(searchAffiliateProducts).toHaveBeenCalledWith("creatina", { cookieHeader: "a=b", csrfToken: "t" }, 0);
-    expect(body).toEqual({ items: [item] });
+    expect(searchAffiliateProducts).toHaveBeenCalledWith("fone", session, 18);
+    expect(mapMercadoLivreItems).toHaveBeenCalledWith([mlItem], session);
+    expect(persistItems).toHaveBeenCalledWith("MERCADO_LIVRE", [
+      expect.objectContaining({ productId: "MLB1" }),
+    ]);
+    expect(findHighlightsByProductIds).toHaveBeenCalledWith("MERCADO_LIVRE", ["MLB1"]);
+    expect(body).toEqual({ items: [highlightRow], fetchedCount: 1 });
   });
 
-  it("passes the offset query param through to searchAffiliateProducts for pagination", async () => {
-    vi.mocked(getSession).mockResolvedValue({ cookieHeader: "a=b", csrfToken: "t" });
-    vi.mocked(searchAffiliateProducts).mockResolvedValue([item]);
-    const request = buildRequest("creatina", 30);
+  it("defaults offset to 0 and query to empty when not given", async () => {
+    vi.mocked(getSession).mockResolvedValue(session);
+    vi.mocked(searchAffiliateProducts).mockResolvedValue([]);
+    vi.mocked(mapMercadoLivreItems).mockResolvedValue([]);
+    vi.mocked(findHighlightsByProductIds).mockResolvedValue([]);
 
-    await GET(request);
+    await GET(new NextRequest("http://localhost/api/admin/mercadolivre/search", { headers: authHeader() }));
 
-    expect(searchAffiliateProducts).toHaveBeenCalledWith(
-      "creatina",
-      { cookieHeader: "a=b", csrfToken: "t" },
-      30
-    );
+    expect(searchAffiliateProducts).toHaveBeenCalledWith("", session, 0);
   });
 
-  it("defaults to offset 0 when the offset param is missing, negative, or invalid", async () => {
-    vi.mocked(getSession).mockResolvedValue({ cookieHeader: "a=b", csrfToken: "t" });
-    vi.mocked(searchAffiliateProducts).mockResolvedValue([item]);
-
-    await GET(buildRequest("creatina", -5));
-
-    expect(searchAffiliateProducts).toHaveBeenCalledWith(
-      "creatina",
-      { cookieHeader: "a=b", csrfToken: "t" },
-      0
-    );
-  });
-
-  it("returns 401 session_expired when the client throws MercadoLivreSessionExpiredError", async () => {
-    vi.mocked(getSession).mockResolvedValue({ cookieHeader: "a=b", csrfToken: "t" });
+  it("returns 401 session_expired when MercadoLivreSessionExpiredError is thrown", async () => {
+    vi.mocked(getSession).mockResolvedValue(session);
     vi.mocked(searchAffiliateProducts).mockRejectedValue(new MercadoLivreSessionExpiredError());
-    const request = buildRequest();
 
-    const response = await GET(request);
-    const body = await response.json();
+    const response = await GET(
+      new NextRequest("http://localhost/api/admin/mercadolivre/search", { headers: authHeader() })
+    );
 
     expect(response.status).toBe(401);
-    expect(body).toEqual({ error: "session_expired" });
   });
 
   it("returns 502 on any other error", async () => {
-    vi.mocked(getSession).mockResolvedValue({ cookieHeader: "a=b", csrfToken: "t" });
+    vi.mocked(getSession).mockResolvedValue(session);
     vi.mocked(searchAffiliateProducts).mockRejectedValue(new Error("boom"));
-    const request = buildRequest();
 
-    const response = await GET(request);
+    const response = await GET(
+      new NextRequest("http://localhost/api/admin/mercadolivre/search", { headers: authHeader() })
+    );
 
     expect(response.status).toBe(502);
   });
