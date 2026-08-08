@@ -5,9 +5,9 @@ import { usePathname, useRouter } from "next/navigation";
 
 const LINKS = [
   { href: "/admin", label: "Painel" },
-  { href: "/admin/produtos/novo", label: "Cadastrar produto" },
   { href: "/admin/mercadolivre", label: "Hub Mercado Livre" },
   { href: "/admin/amazon", label: "Hub Amazon" },
+  { href: "/admin/shopee", label: "Hub Shopee" },
   { href: "/admin/postar", label: "Postar" },
   { href: "/admin/vitrine", label: "Vitrine" },
 ];
