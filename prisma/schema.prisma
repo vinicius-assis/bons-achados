@@ -37,6 +37,7 @@ model PostDraft {
   marketplace   Marketplace
   source        ProductSource
   title         String
+  imageTitle    String?
   affiliateLink String
   image         String
   price         Float
