@@ -5,6 +5,8 @@ import { mapMercadoLivreItems } from "@/lib/collect/mercadolivre";
 import { persistItems, findHighlightsByProductIds } from "@/lib/collect/persist";
 import { isAuthorizedAdminRequest } from "@/lib/adminSession";
 
+export const maxDuration = 60;
+
 export async function GET(request: NextRequest) {
   if (!isAuthorizedAdminRequest(request)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });

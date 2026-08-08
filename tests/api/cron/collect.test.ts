@@ -3,11 +3,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 vi.mock("@/lib/collect/amazon", () => ({ collectAmazon: vi.fn() }));
 vi.mock("@/lib/collect/mercadolivre", () => ({ collectMercadoLivre: vi.fn() }));
 vi.mock("@/lib/collect/shopee", () => ({ collectShopee: vi.fn() }));
+vi.mock("@/lib/highlights/store", () => ({ deleteStaleHighlights: vi.fn() }));
 
 import { POST } from "@/app/api/cron/collect/route";
 import { collectAmazon } from "@/lib/collect/amazon";
 import { collectMercadoLivre } from "@/lib/collect/mercadolivre";
 import { collectShopee } from "@/lib/collect/shopee";
+import { deleteStaleHighlights } from "@/lib/highlights/store";
 
 const OK_RESULT = { attempted: 10, inserted: 8, skipped: 2 };
 
@@ -86,5 +88,15 @@ describe("POST /api/cron/collect", () => {
     expect(body.amazon.error).toBeDefined();
     expect(body.mercadoLivre).toEqual(OK_RESULT);
     expect(body.shopee).toEqual(OK_RESULT);
+  });
+
+  it("clears stale highlights before collecting", async () => {
+    vi.mocked(collectAmazon).mockResolvedValue(OK_RESULT);
+    vi.mocked(collectMercadoLivre).mockResolvedValue(OK_RESULT);
+    vi.mocked(collectShopee).mockResolvedValue(OK_RESULT);
+
+    await POST(buildRequest("test-secret"));
+
+    expect(deleteStaleHighlights).toHaveBeenCalled();
   });
 });

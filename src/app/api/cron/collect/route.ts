@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { collectAmazon } from "@/lib/collect/amazon";
 import { collectMercadoLivre } from "@/lib/collect/mercadolivre";
 import { collectShopee } from "@/lib/collect/shopee";
+import { deleteStaleHighlights } from "@/lib/highlights/store";
 import type { CollectResult } from "@/lib/collect/types";
+
+export const maxDuration = 60;
 
 function toResult(settled: PromiseSettledResult<CollectResult>): CollectResult {
   if (settled.status === "fulfilled") {
@@ -17,6 +20,8 @@ export async function POST(request: Request) {
   if (!secret || authHeader !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
+
+  await deleteStaleHighlights();
 
   const [amazon, mercadoLivre, shopee] = await Promise.allSettled([
     collectAmazon(),
