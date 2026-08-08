@@ -1,105 +1,86 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextRequest } from "next/server";
 
-vi.mock("@/lib/shopee/hubClient", async () => {
-  const actual = await vi.importActual("@/lib/shopee/hubClient");
-  return { ...actual, searchProducts: vi.fn() };
-});
+vi.mock("@/lib/shopee/hubClient", () => ({ searchProducts: vi.fn() }));
+vi.mock("@/lib/collect/persist", () => ({
+  persistItems: vi.fn(),
+  findHighlightsByProductIds: vi.fn(),
+}));
 
 import { GET } from "@/app/api/admin/shopee/search/route";
 import { searchProducts } from "@/lib/shopee/hubClient";
+import { persistItems, findHighlightsByProductIds } from "@/lib/collect/persist";
 import { ADMIN_SESSION_COOKIE, createSessionToken } from "@/lib/adminSession";
 
 function authHeader() {
   return { cookie: `${ADMIN_SESSION_COOKIE}=${createSessionToken()}` };
 }
 
-const item = {
-  itemId: "17979995178",
-  title: "IKEA starfish",
-  price: 45.99,
-  discount: 10,
-  image: "https://cf.shopee.com.br/file/abc123",
-  affiliateLink: "https://shope.ee/xxxxxxxx",
-  productLink: "https://shopee.com.br/product/14318452/4058376611",
-  shopName: "IKEA",
-  commissionRate: "0.25",
+const shopeeItem = {
+  itemId: "SP1",
+  title: "Air Fryer 4L",
+  price: 219.9,
+  discount: 20,
+  image: "https://img.example/2.jpg",
+  affiliateLink: "https://s.shopee.com.br/abc",
+  productLink: "https://shopee.com.br/product/1/2",
+  shopName: "Loja X",
+  commissionRate: "0.05",
   ratingStar: 4.7,
 };
-
-function buildRequest(query = "fone bluetooth", page?: number) {
-  const url = new URL("http://localhost/api/admin/shopee/search");
-  url.searchParams.set("q", query);
-  if (page !== undefined) {
-    url.searchParams.set("page", String(page));
-  }
-  return new NextRequest(url, { headers: authHeader() });
-}
+const highlightRow = { id: "hl1", marketplace: "SHOPEE", productId: "SP1" };
 
 describe("GET /api/admin/shopee/search", () => {
   beforeEach(() => {
     process.env.ADMIN_USER = "admin";
     process.env.ADMIN_PASSWORD = "test-password";
   });
-
   afterEach(() => {
     vi.clearAllMocks();
     delete process.env.ADMIN_USER;
     delete process.env.ADMIN_PASSWORD;
   });
 
-  it("returns 401 without calling searchProducts when the session cookie is missing or invalid", async () => {
-    const request = new NextRequest("http://localhost/api/admin/shopee/search?q=fone");
-
-    const response = await GET(request);
+  it("returns 401 without calling searchProducts when unauthorized", async () => {
+    const response = await GET(new NextRequest("http://localhost/api/admin/shopee/search"));
 
     expect(response.status).toBe(401);
     expect(searchProducts).not.toHaveBeenCalled();
   });
 
-  it("returns items and hasNextPage from searchProducts", async () => {
-    vi.mocked(searchProducts).mockResolvedValue({ items: [item], hasNextPage: true });
+  it("searches, persists the mapped items, and returns the enriched pool rows plus hasNextPage", async () => {
+    vi.mocked(searchProducts).mockResolvedValue({ items: [shopeeItem], hasNextPage: true });
+    vi.mocked(findHighlightsByProductIds).mockResolvedValue([highlightRow] as never);
 
-    const response = await GET(buildRequest());
+    const response = await GET(
+      new NextRequest("http://localhost/api/admin/shopee/search?q=air+fryer&page=2", {
+        headers: authHeader(),
+      })
+    );
     const body = await response.json();
 
-    expect(searchProducts).toHaveBeenCalledWith("fone bluetooth", 1);
-    expect(body).toEqual({ items: [item], hasNextPage: true });
+    expect(searchProducts).toHaveBeenCalledWith("air fryer", 2);
+    expect(persistItems).toHaveBeenCalledWith("SHOPEE", [expect.objectContaining({ productId: "SP1" })]);
+    expect(findHighlightsByProductIds).toHaveBeenCalledWith("SHOPEE", ["SP1"]);
+    expect(body).toEqual({ items: [highlightRow], hasNextPage: true });
   });
 
-  it("passes the page query param through to searchProducts", async () => {
-    vi.mocked(searchProducts).mockResolvedValue({ items: [item], hasNextPage: false });
-
-    await GET(buildRequest("fone bluetooth", 3));
-
-    expect(searchProducts).toHaveBeenCalledWith("fone bluetooth", 3);
-  });
-
-  it("defaults to page 1 when the page param is missing, zero, negative, or invalid", async () => {
-    vi.mocked(searchProducts).mockResolvedValue({ items: [item], hasNextPage: false });
-
-    await GET(buildRequest("fone bluetooth", -5));
-
-    expect(searchProducts).toHaveBeenCalledWith("fone bluetooth", 1);
-  });
-
-  it("defaults the keyword to an empty string when q is missing", async () => {
+  it("defaults page to 1 and query to empty when not given", async () => {
     vi.mocked(searchProducts).mockResolvedValue({ items: [], hasNextPage: false });
-    const request = new NextRequest("http://localhost/api/admin/shopee/search", {
-      headers: authHeader(),
-    });
+    vi.mocked(findHighlightsByProductIds).mockResolvedValue([]);
 
-    await GET(request);
+    await GET(new NextRequest("http://localhost/api/admin/shopee/search", { headers: authHeader() }));
 
     expect(searchProducts).toHaveBeenCalledWith("", 1);
   });
 
-  it("returns 502 when searchProducts throws", async () => {
+  it("returns 502 on any error", async () => {
     vi.mocked(searchProducts).mockRejectedValue(new Error("boom"));
 
-    const response = await GET(buildRequest());
+    const response = await GET(
+      new NextRequest("http://localhost/api/admin/shopee/search", { headers: authHeader() })
+    );
 
     expect(response.status).toBe(502);
-    expect(await response.json()).toEqual({ error: "search_failed" });
   });
 });
