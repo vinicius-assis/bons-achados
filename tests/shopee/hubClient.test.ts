@@ -114,6 +114,39 @@ describe("searchProducts", () => {
     expect(items).toEqual([]);
   });
 
+  it("drops a node with a missing imageUrl", async () => {
+    const broken = { ...RAW_NODE, itemId: 999, imageUrl: undefined };
+    vi.mocked(shopeeRequest).mockResolvedValue({
+      productOfferV2: { nodes: [broken], pageInfo: { hasNextPage: false } },
+    });
+
+    const { items } = await searchProducts("starfish", 1);
+
+    expect(items).toEqual([]);
+  });
+
+  it("drops a node with priceMin of 0", async () => {
+    const broken = { ...RAW_NODE, itemId: 999, priceMin: "0" };
+    vi.mocked(shopeeRequest).mockResolvedValue({
+      productOfferV2: { nodes: [broken], pageInfo: { hasNextPage: false } },
+    });
+
+    const { items } = await searchProducts("starfish", 1);
+
+    expect(items).toEqual([]);
+  });
+
+  it("drops a node with a null priceMin", async () => {
+    const broken = { ...RAW_NODE, itemId: 999, priceMin: null };
+    vi.mocked(shopeeRequest).mockResolvedValue({
+      productOfferV2: { nodes: [broken], pageInfo: { hasNextPage: false } },
+    });
+
+    const { items } = await searchProducts("starfish", 1);
+
+    expect(items).toEqual([]);
+  });
+
   it("propagates a ShopeeApiError thrown by shopeeRequest", async () => {
     const { ShopeeApiError } = await vi.importActual<typeof import("@/lib/shopee/client")>(
       "@/lib/shopee/client"

@@ -57,11 +57,11 @@ type SearchResponse = {
 
 function parseNode(node: RawNode): ShopeeHubItem | null {
   try {
-    if (!node.itemId || !node.productName || !node.offerLink) {
+    if (!node.itemId || !node.productName || !node.offerLink || !node.imageUrl) {
       return null;
     }
     const price = Number(node.priceMin);
-    if (Number.isNaN(price)) {
+    if (!Number.isFinite(price) || price <= 0) {
       return null;
     }
     const discount = node.priceDiscountRate && node.priceDiscountRate > 0 ? node.priceDiscountRate : null;
