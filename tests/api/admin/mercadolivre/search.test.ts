@@ -11,14 +11,10 @@ vi.mock("@/lib/mercadolivre/hubClient", async () => {
     searchAffiliateProducts: vi.fn(),
   };
 });
-vi.mock("@/lib/mercadolivre/createLink", () => ({
-  findGeneratedTodayMap: vi.fn().mockResolvedValue(new Map()),
-}));
 
 import { GET } from "@/app/api/admin/mercadolivre/search/route";
 import { getSession } from "@/lib/mercadolivre/session";
 import { searchAffiliateProducts, MercadoLivreSessionExpiredError } from "@/lib/mercadolivre/hubClient";
-import { findGeneratedTodayMap } from "@/lib/mercadolivre/createLink";
 import { ADMIN_SESSION_COOKIE, createSessionToken } from "@/lib/adminSession";
 
 function authHeader() {
@@ -67,7 +63,6 @@ describe("GET /api/admin/mercadolivre/search", () => {
     expect(response.status).toBe(401);
     expect(getSession).not.toHaveBeenCalled();
     expect(searchAffiliateProducts).not.toHaveBeenCalled();
-    expect(findGeneratedTodayMap).not.toHaveBeenCalled();
   });
 
   it("returns 401 session_expired when no session is stored", async () => {
@@ -82,18 +77,16 @@ describe("GET /api/admin/mercadolivre/search", () => {
     expect(searchAffiliateProducts).not.toHaveBeenCalled();
   });
 
-  it("returns items annotated with generatedLink from the batched map", async () => {
+  it("returns items from searchAffiliateProducts", async () => {
     vi.mocked(getSession).mockResolvedValue({ cookieHeader: "a=b", csrfToken: "t" });
     vi.mocked(searchAffiliateProducts).mockResolvedValue([item]);
-    vi.mocked(findGeneratedTodayMap).mockResolvedValue(new Map([["MLB123", "https://meli.la/abc"]]));
     const request = buildRequest();
 
     const response = await GET(request);
     const body = await response.json();
 
     expect(searchAffiliateProducts).toHaveBeenCalledWith("creatina", { cookieHeader: "a=b", csrfToken: "t" }, 0);
-    expect(findGeneratedTodayMap).toHaveBeenCalledWith(["MLB123"]);
-    expect(body).toEqual({ items: [{ ...item, generatedLink: "https://meli.la/abc" }] });
+    expect(body).toEqual({ items: [item] });
   });
 
   it("passes the offset query param through to searchAffiliateProducts for pagination", async () => {
@@ -121,18 +114,6 @@ describe("GET /api/admin/mercadolivre/search", () => {
       { cookieHeader: "a=b", csrfToken: "t" },
       0
     );
-  });
-
-  it("returns generatedLink: null when the item was not generated today", async () => {
-    vi.mocked(getSession).mockResolvedValue({ cookieHeader: "a=b", csrfToken: "t" });
-    vi.mocked(searchAffiliateProducts).mockResolvedValue([item]);
-    vi.mocked(findGeneratedTodayMap).mockResolvedValue(new Map());
-    const request = buildRequest();
-
-    const response = await GET(request);
-    const body = await response.json();
-
-    expect(body).toEqual({ items: [{ ...item, generatedLink: null }] });
   });
 
   it("returns 401 session_expired when the client throws MercadoLivreSessionExpiredError", async () => {
