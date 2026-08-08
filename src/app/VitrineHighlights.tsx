@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { Highlight } from "@prisma/client";
+import { formatBrazilTime } from "@/lib/date";
 
 type SortOption = "price-desc" | "price-asc" | "platform";
 
@@ -130,6 +131,9 @@ export default function VitrineHighlights({ highlights }: { highlights: Highligh
                   </span>
                 )}
               </div>
+              <p className="font-mono text-[10px] tracking-wider text-ink/50 uppercase">
+                Preço às {formatBrazilTime(highlight.createdAt)}
+              </p>
               <a
                 href={highlight.affiliateLink}
                 target="_blank"
