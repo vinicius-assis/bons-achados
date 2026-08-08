@@ -121,24 +121,26 @@ export default function VitrineHighlights({ highlights }: { highlights: Highligh
               {highlight.note && (
                 <p className="line-clamp-3 text-xs leading-snug text-ink/70">{highlight.note}</p>
               )}
-              <div className="flex items-baseline gap-2">
-                <span className="font-display font-stretch-condensed text-xl leading-none font-black tracking-tight text-ink tabular-nums">
-                  {formatPrice(highlight.price)}
+              <div className="mt-auto flex items-end justify-between gap-2">
+                <span className="font-mono text-[10px] tracking-wider text-ink/50 uppercase">
+                  {formatBrazilTime(highlight.createdAt)}
                 </span>
-                {highlight.oldPrice !== null && (
-                  <span className="font-mono text-xs text-ash line-through tabular-nums">
-                    {formatPrice(highlight.oldPrice)}
+                <div className="flex items-baseline gap-2">
+                  <span className="font-display font-stretch-condensed text-xl leading-none font-black tracking-tight text-ink tabular-nums">
+                    {formatPrice(highlight.price)}
                   </span>
-                )}
+                  {highlight.oldPrice !== null && (
+                    <span className="font-mono text-xs text-ash line-through tabular-nums">
+                      {formatPrice(highlight.oldPrice)}
+                    </span>
+                  )}
+                </div>
               </div>
-              <p className="font-mono text-[10px] tracking-wider text-ink/50 uppercase">
-                Preço às {formatBrazilTime(highlight.createdAt)}
-              </p>
               <a
                 href={highlight.affiliateLink}
                 target="_blank"
                 rel="noopener noreferrer sponsored"
-                className="group mt-auto flex items-center justify-center gap-2 rounded-xl bg-gold px-4 py-3 font-display font-stretch-condensed text-xs font-black tracking-wide text-ink uppercase italic shadow-[0_6px_14px_-6px_rgba(217,163,17,0.5)] transition hover:bg-gold-deep hover:shadow-[0_8px_18px_-6px_rgba(217,163,17,0.55)] focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:ring-offset-2 focus-visible:ring-offset-white focus-visible:outline-none"
+                className="group flex items-center justify-center gap-2 rounded-xl bg-gold px-4 py-3 font-display font-stretch-condensed text-xs font-black tracking-wide text-ink uppercase italic shadow-[0_6px_14px_-6px_rgba(217,163,17,0.5)] transition hover:bg-gold-deep hover:shadow-[0_8px_18px_-6px_rgba(217,163,17,0.55)] focus-visible:ring-2 focus-visible:ring-gold-deep focus-visible:ring-offset-2 focus-visible:ring-offset-white focus-visible:outline-none"
               >
                 Ver oferta
                 <svg
