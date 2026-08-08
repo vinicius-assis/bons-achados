@@ -1,0 +1,155 @@
+# Vitrine automática — Design
+
+Data: 2026-08-07
+
+## Objetivo
+
+Substituir a curadoria manual da vitrine pública (botão "Destacar na vitrine" nos hubs) por um pool de itens coletado automaticamente dos três marketplaces (Mercado Livre, Amazon, Shopee), com paginação de 30 em 30 na vitrine pública e reabastecimento automático. Os hubs admin (`/admin/mercadolivre`, `/admin/amazon`, `/admin/shopee`) passam a servir só pra selecionar itens pra postar (`PostDraft` / Telegram-Instagram), mas leem/escrevem no mesmo pool compartilhado.
+
+## Contexto
+
+Investigação do código atual (2026-08-07) mostrou que o pipeline automático de Mercado Livre descrito no spec original (`2026-08-01-bons-achados-design.md`) — cron de coleta, model `Product`, Telegram — nunca foi implementado. O que existe hoje:
+
+- Três hubs admin (ML, Amazon, Shopee), cada um com busca on-demand (ML e Shopee por palavra-chave; Amazon por feed de ofertas do dia, sem keyword) e sessão/API key própria.
+- `PostDraft`: fila de itens selecionados pra postar (fluxo de Telegram/Instagram), inalterada por este design.
+- `Highlight`: tabela da vitrine pública, hoje só populada por curadoria manual (botão "Destacar" em cada hub), com `note` obrigatória (mín. 15 caracteres) por exigência da Amazon (motivo de uma suspensão anterior da conta por falta de conteúdo original).
+- Model `Product`: existe no schema, mas não tem nenhuma referência no código — morto.
+
+Como não há cron nem pipeline automático hoje, esta mudança é greenfield para os três marketplaces (não é uma migração de um cron existente).
+
+## Decisões (confirmadas com o usuário)
+
+1. **Nota de conteúdo original**: em vez de IA gerar uma nota por item (custo é desprezível — estimado em frações de centavo de dólar por item, não foi o motivo da escolha), usa-se um **pool fixo de ~50 notas genéricas**, sorteadas/rotacionadas por item. Risco assumido: texto repetitivo entre produtos diferentes pode voltar a acionar o motivo da suspensão anterior da Amazon (falta de conteúdo original por oferta) — decisão de simplicidade para o MVP, revisitar se a Amazon reprovar por esse motivo de novo.
+2. **Vitrine 100% automática**: sem curadoria manual. Os botões "Destacar na vitrine" saem dos três hubs; a rota `POST /api/admin/highlights` é removida.
+3. **Pool compartilhado entre vitrine e hub**: o mesmo dado que a coleta automática grava é o que os hubs mostram ao abrir (sem precisar buscar) e o que a vitrine pública pagina. Uma busca manual no hub grava no mesmo pool (mesmo filtro/dedup/nota do cron).
+4. **Mercado Livre entra no escopo** (não fica de fora): os três marketplaces usam a mesma lógica de coleta automática.
+5. **Gatilho de coleta: cron periódico**, não sob demanda — a vitrine pública só lê do banco, nunca chama API externa na hora do acesso de um visitante (evita latência/timeout na função serverless).
+6. **Filtro de qualidade mínimo**: só descarta item com dado inválido (sem imagem, sem preço positivo — mesma regra já aplicada ao Shopee no commit `b6a6f37`). Sem exigir desconto/nota mínima, que nem sempre vêm preenchidos pelas APIs de Amazon/Shopee.
+7. **Lista de termos de busca para ML/Shopee**: lista fixa proposta abaixo, editável no código depois.
+8. **Corte diário às 5h** (não 8h, ajustado durante a revisão): limpeza roda às 5h da manhã (America/Sao_Paulo) e, no mesmo workflow, dispara a coleta em seguida — minimiza a janela em que a vitrine fica vazia entre limpar e repopular.
+9. **Alertas de sessão expirada**: e-mail de falha do GitHub Actions (canal já existente, nenhum canal de notificação dedicado foi construído) — suficiente pro MVP.
+
+## Arquitetura / Fluxo de dados
+
+```
+[A cada 20 min, GitHub Actions]
+  cron → POST /api/cron/collect (secret)
+      → para cada marketplace, independente (falha em um não trava os outros):
+          Amazon: pagina feed de ofertas do dia (sem keyword), até 50 itens
+          ML / Shopee: sorteia 1 termo da lista fixa, busca até 50 itens
+      → cada item: filtro (imagem + preço válido) → dedup (marketplace, productId)
+        contra Highlight → sorteia 1 nota do pool de 50 → grava em Highlight
+
+[Às 5h da manhã, America/Sao_Paulo, mesmo workflow]
+  cron → POST /api/cron/highlights-cleanup (secret)
+      → apaga todo Highlight com createdAt anterior a hoje 5h
+      → (mesmo job, step seguinte) dispara POST /api/cron/collect imediatamente
+        (não espera o próximo tick do cron periódico de 20 min)
+
+[Visitante do site]
+  GET / ou /?page=N → lê Highlight (createdAt >= corte de hoje 5h),
+      30 por página, createdAt desc — nunca chama API externa
+
+[Admin, a qualquer momento]
+  GET /admin/{mercadolivre,amazon,shopee}
+      → carrega automaticamente os itens já no pool daquele marketplace
+        (mesmo filtro do corte de hoje)
+      → busca manual (ML/Shopee: keyword; Amazon: sem campo, já é feed)
+        grava no mesmo pool (mesmo filtro/dedup/nota)
+      → "Selecionar para postar" grava em PostDraft, inalterado
+```
+
+## Modelo de dados
+
+`Highlight` ganha `productId` (chave de dedup) e perde a obrigatoriedade de nota "escrita à mão" (passa a vir do pool):
+
+```prisma
+model Highlight {
+  id            String      @id @default(cuid())
+  marketplace   Marketplace
+  productId     String
+  title         String
+  affiliateLink String
+  image         String
+  price         Float
+  oldPrice      Float?
+  discount      Float?
+  note          String
+  createdAt     DateTime    @default(now())
+
+  @@unique([marketplace, productId])
+  @@index([createdAt])
+}
+```
+
+Migração: linhas antigas de `Highlight` (curadoria manual anterior) não têm `productId` — são apagadas antes da migração (mesmo espírito do "one-off cleanup" já feito pra Amazon no spec de compliance), já que de qualquer forma somem no próximo corte das 5h.
+
+Model `Product` é removido do schema (zero referências no código).
+
+## Pool de notas genéricas
+
+Lista fixa de ~50 notas curtas, sem menção a produto específico, em `src/lib/highlights/genericNotes.ts` — ex.: "Vale a pena conferir esse preço antes que a oferta acabe.", "Selecionamos essa oferta pelo bom custo-benefício.", "Oferta com boa relação entre preço e avaliação dos compradores." (lista final de 50 escrita na fase de implementação). Sorteio aleatório simples (`Math.random()` sobre o array) a cada item novo — não precisa ser determinístico.
+
+## Lista de termos de busca (ML / Shopee)
+
+Lista fixa em `src/lib/collect/searchTerms.ts`, ~15-20 categorias genéricas de e-commerce brasileiro: eletrônicos, celular, informática, casa, cozinha, beleza, moda, calçados, esporte, brinquedos, livros, bebê, pet, ferramentas, automotivo, games, som e áudio, decoração, papelaria, saúde. A cada ciclo do cron, cada marketplace que precisa de keyword sorteia 1 termo dessa lista.
+
+## Pipeline de coleta (`src/lib/collect/`)
+
+- `collectAmazon(): Promise<CollectResult>` — pagina `listDeals` (já existe em `src/lib/amazon/hubClient.ts`) até acumular 50 itens ou esgotar páginas.
+- `collectMercadoLivre(): Promise<CollectResult>` — sorteia termo, chama `search` do hub ML existente.
+- `collectShopee(): Promise<CollectResult>` — sorteia termo, chama `searchProducts` do hub Shopee existente.
+- `persistItems(marketplace, items): Promise<{inserted: number; skipped: number}>` — função compartilhada pelos três: filtra (imagem + preço > 0), dedup via `@@unique([marketplace, productId])` (upsert com `skipDuplicates` ou `createMany` ignorando conflito — decidir na implementação qual API do Prisma cabe melhor), atribui nota sorteada, grava.
+- `CollectResult = { attempted: number; inserted: number; skipped: number; error?: string }` por marketplace — usado tanto pelo cron quanto pelo carregamento automático do hub.
+
+`POST /api/cron/collect` (protegida por secret, mesmo padrão de `POSTDRAFT_CLEANUP_SECRET`): chama os três coletores em `Promise.allSettled` (um rejeitar não derruba os outros), loga cada resultado, retorna 200 com o resumo — mas se algum marketplace falhar (ex.: sessão expirada), essa falha é logada e o step do workflow correspondente é o que fica visível como erro no GitHub Actions (mecanismo exato de "falhar visivelmente por marketplace" decidido na implementação, ex.: resposta HTTP 207 com detalhe por marketplace, e o workflow YAML inspeciona o corpo).
+
+## Vitrine pública
+
+`src/app/page.tsx` (Server Component) passa a paginar: `?page=N` (default 1), 30 itens por página, `createdAt >= corte de hoje 5h`, `createdAt desc`. Sem busca/filtro por texto — só paginação simples (próxima/anterior).
+
+`startOfTodayInBrazil()` (`src/lib/date.ts`) muda de meia-noite para 5h: se a hora atual em America/Sao_Paulo for antes das 5h, o "corte de hoje" é 5h de ontem; senão, 5h de hoje.
+
+## Hub admin
+
+Cada `AdminXAdmin.tsx` (ML/Amazon/Shopee):
+- Remove o botão "Destacar na vitrine" e o textarea de nota associado (do spec de compliance) — a nota agora vem do pool automático, não é mais escrita por item no hub.
+- Ao montar a página, chama a mesma função `collectX`/lista do pool (sem custo de rede novo pro admin — lê do banco, filtrado por marketplace + corte de hoje) em vez de começar vazio.
+- Busca manual (campo de keyword pra ML/Shopee) continua existindo, mas agora os resultados passam por `persistItems` antes de renderizar — ou seja, aparecem tanto na tela do hub quanto (na próxima carga) na vitrine pública.
+- "Selecionar para postar" inalterado.
+- Cada card do pool ganha um botão "Remover da vitrine" — chama `DELETE /api/admin/highlights/[id]`. Sem essa válvula de escape, um item ruim que passe pelo filtro mínimo ("só dados válidos") ficaria no ar até o corte das 5h do dia seguinte, sem nenhuma curadoria manual pra tirá-lo antes.
+
+## Cron / limpeza (workflow único às 5h)
+
+`.github/workflows/highlights-cleanup.yml` (schedule ajustado): `cron: "0 8 * * *"` (5h America/Sao_Paulo = 8h UTC, fixo, sem DST — mesmo padrão dos workflows existentes). Dois steps sequenciais no mesmo job:
+1. `curl` pra `POST /api/cron/highlights-cleanup` (apaga `Highlight` com `createdAt` antes do corte de hoje 5h).
+2. `curl` pra `POST /api/cron/collect`, imediatamente depois — repopula antes que a janela vazia dure mais que o tempo desses dois requests.
+
+`.github/workflows/collect.yml` (novo): `cron: "*/20 * * * *"`, chama só `POST /api/cron/collect`, roda o dia inteiro independente do workflow de limpeza.
+
+## Removido
+
+- Botão "Destacar na vitrine" + textarea de nota nos três `*Admin.tsx`.
+- `POST /api/admin/highlights` (rota de criação manual) — a coleta automática/hub-search (`persistItems`) é o único caminho de escrita agora.
+- Página `/admin/vitrine` (tela de curadoria separada) — cada hub já mostra e permite remover os itens do seu próprio marketplace; `GET /api/admin/highlights` e `DELETE /api/admin/highlights/[id]` continuam existindo (moderação, ver seção "Hub admin"), só a tela dedicada some.
+- Model `Product` do schema (`prisma/schema.prisma`), enum `ProductSource` junto (só usado por `Product`).
+
+## Testes
+
+- `persistItems`: filtra item sem imagem/preço inválido; dedup por `(marketplace, productId)` não duplica em chamadas sucessivas; atribui nota do pool.
+- `collectAmazon`/`collectMercadoLivre`/`collectShopee`: mockam os hub clients existentes, cobrem paginação até 50 itens e propagação de erro de sessão expirada como `CollectResult.error` (sem lançar, pra não derrubar `Promise.allSettled`).
+- `POST /api/cron/collect`: 401 sem secret; chama os três coletores; resposta reflete sucesso parcial quando um marketplace falha.
+- `startOfTodayInBrazil` (corte 5h): teste cobrindo os dois lados da fronteira (23h de ontem → corte é 5h de ontem; 6h de hoje → corte é 5h de hoje).
+- `GET /` paginação: página 2 não repete itens da página 1; página além do total retorna lista vazia sem erro.
+- `POST /api/cron/highlights-cleanup`: só remove `Highlight` com `createdAt` antes do corte de hoje 5h.
+- `DELETE /api/admin/highlights/[id]`: comportamento inalterado (já existe, coberto por `tests/api/admin/highlights` atuais) — remove o item de moderação a partir de um hub, sem depender de `/admin/vitrine`.
+
+## Verificação manual
+
+1. Rodar a migração (novo `productId` em `Highlight`, remoção de `Product`/`ProductSource`) contra Neon.
+2. Popular a lista de termos e o pool de 50 notas genéricas.
+3. Disparar `POST /api/cron/collect` manualmente (com o secret) e confirmar que `Highlight` recebe itens dos três marketplaces (ou falha isolada só no marketplace com sessão expirada).
+4. Abrir `/` e confirmar 30 itens por página, com nota, imagem, preço e link de afiliado funcional.
+5. Abrir cada hub admin e confirmar que carrega automaticamente os itens do pool, e que uma busca manual nova também aparece na vitrine pública na atualização seguinte.
+6. Disparar `POST /api/cron/highlights-cleanup` manualmente e confirmar que só remove itens antigos (antes do corte de 5h), preservando os de hoje.
+7. Confirmar que os workflows do GitHub Actions (`collect.yml` a cada 20 min, `highlights-cleanup.yml` às 5h com os dois steps) estão configurados e habilitados.
