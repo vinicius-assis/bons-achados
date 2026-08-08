@@ -95,7 +95,7 @@ export default function MercadoLivreAdmin() {
   // Loads the pool already collected for this marketplace — a database
   // read, no live ML request, so it doesn't depend on hasSession.
   useEffect(() => {
-    // eslint-disable-next-line
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     fetch("/api/admin/highlights?marketplace=MERCADO_LIVRE")
       .then((response) => response.json())
