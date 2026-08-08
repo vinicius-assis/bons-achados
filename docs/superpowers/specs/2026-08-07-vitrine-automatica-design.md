@@ -106,9 +106,19 @@ Lista fixa em `src/lib/collect/searchTerms.ts`, ~15-20 categorias genéricas de 
 
 ## Vitrine pública
 
-`src/app/page.tsx` (Server Component) passa a paginar: `?page=N` (default 1), 30 itens por página, `createdAt >= corte de hoje 5h`, `createdAt desc`. Sem busca/filtro por texto — só paginação simples (próxima/anterior).
+`src/app/page.tsx` (Server Component) passa a paginar: `?page=N` (default 1), 30 itens por página, `createdAt >= corte de hoje 5h`, `createdAt desc`.
 
 `startOfTodayInBrazil()` (`src/lib/date.ts`) muda de meia-noite para 5h: se a hora atual em America/Sao_Paulo for antes das 5h, o "corte de hoje" é 5h de ontem; senão, 5h de hoje.
+
+### Filtro por marketplace e busca por texto
+
+Um `<form method="get">` no topo da página, sem JavaScript de estado no cliente — a própria navegação GET recarrega `/` com os novos query params, mantendo a página um Server Component simples:
+
+- Três checkboxes ("Mercado Livre", "Amazon", "Shopee"), `name="marketplace"` cada um com o valor do enum (`MERCADO_LIVRE`/`AMAZON`/`SHOPEE`). Marcar um ou mais mostra só esses; marcar nenhum (comportamento padrão, form nunca submetido) mostra todos.
+- Um campo de texto `name="q"` — busca por substring no título, case-insensitive (Prisma `contains` + `mode: "insensitive"`). Sem índice de full-text novo: o volume esperado (pool renovado a cada 5h, algumas centenas de itens) não justifica um índice GIN/trigram — revisitar só se o volume crescer muito.
+- Um campo oculto `name="filtered" value="1"`, sempre enviado junto do form — resolve a ambiguidade de checkboxes desmarcados: HTML não envia checkboxes desmarcados no GET, então "nenhum marketplace marcado" e "usuário nunca tocou no filtro" teriam a mesma URL (sem `marketplace=`) se não fosse por esse marcador. Regra: sem `filtered=1` → mostra todos os marketplaces (estado inicial); com `filtered=1` e nenhum `marketplace=` → mostra lista vazia (usuário desmarcou tudo de propósito).
+- `page` não é um campo do form (não carrega valor anterior) — qualquer submissão do filtro/busca naturalmente volta pra página 1. Os links de "próxima página"/"página anterior" preservam `marketplace`, `q` e `filtered` na querystring.
+- Query final: `marketplace IN (...)` (ou todos, conforme regra acima) `AND title ILIKE '%q%'` (se `q` não vazio) `AND createdAt >= corte de hoje 5h`, ordenado por `createdAt desc`, paginado.
 
 ## Hub admin
 
@@ -141,6 +151,8 @@ Cada `AdminXAdmin.tsx` (ML/Amazon/Shopee):
 - `POST /api/cron/collect`: 401 sem secret; chama os três coletores; resposta reflete sucesso parcial quando um marketplace falha.
 - `startOfTodayInBrazil` (corte 5h): teste cobrindo os dois lados da fronteira (23h de ontem → corte é 5h de ontem; 6h de hoje → corte é 5h de hoje).
 - `GET /` paginação: página 2 não repete itens da página 1; página além do total retorna lista vazia sem erro.
+- `GET /` filtro por marketplace: sem `filtered=1` mostra todos; com `filtered=1` e um `marketplace` mostra só esse; com `filtered=1` e nenhum `marketplace` mostra lista vazia.
+- `GET /` busca por texto: `q` filtra por substring case-insensitive no título; combinado com filtro de marketplace, aplica os dois (AND); `q` vazio não filtra.
 - `POST /api/cron/highlights-cleanup`: só remove `Highlight` com `createdAt` antes do corte de hoje 5h.
 - `DELETE /api/admin/highlights/[id]`: comportamento inalterado (já existe, coberto por `tests/api/admin/highlights` atuais) — remove o item de moderação a partir de um hub, sem depender de `/admin/vitrine`.
 
@@ -150,6 +162,7 @@ Cada `AdminXAdmin.tsx` (ML/Amazon/Shopee):
 2. Popular a lista de termos e o pool de 50 notas genéricas.
 3. Disparar `POST /api/cron/collect` manualmente (com o secret) e confirmar que `Highlight` recebe itens dos três marketplaces (ou falha isolada só no marketplace com sessão expirada).
 4. Abrir `/` e confirmar 30 itens por página, com nota, imagem, preço e link de afiliado funcional.
+4b. Marcar só "Shopee" e confirmar que só itens Shopee aparecem; marcar "Shopee" + "Mercado Livre" e confirmar que Amazon some; desmarcar tudo e confirmar lista vazia; buscar um termo do título e confirmar que só itens compatíveis aparecem, combinando com o filtro de marketplace.
 5. Abrir cada hub admin e confirmar que carrega automaticamente os itens do pool, e que uma busca manual nova também aparece na vitrine pública na atualização seguinte.
 6. Disparar `POST /api/cron/highlights-cleanup` manualmente e confirmar que só remove itens antigos (antes do corte de 5h), preservando os de hoje.
 7. Confirmar que os workflows do GitHub Actions (`collect.yml` a cada 20 min, `highlights-cleanup.yml` às 5h com os dois steps) estão configurados e habilitados.
