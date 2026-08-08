@@ -24,7 +24,7 @@ export async function listTodaysHighlights(marketplace?: Marketplace): Promise<H
       createdAt: { gte: startOfTodayInBrazil() },
       ...(marketplace ? { marketplace } : {}),
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
 }
 
@@ -52,7 +52,7 @@ export async function listHighlightsPage(
       marketplace: { in: marketplaces },
       ...(trimmedQuery ? { title: { contains: trimmedQuery, mode: "insensitive" as const } } : {}),
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     skip: (page - 1) * pageSize,
     take: pageSize + 1,
   });

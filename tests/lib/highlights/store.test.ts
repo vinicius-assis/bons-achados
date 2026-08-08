@@ -64,7 +64,7 @@ describe("listTodaysHighlights", () => {
 
     expect(prisma.highlight.findMany).toHaveBeenCalledWith({
       where: { createdAt: { gte: new Date("2026-08-03T08:00:00.000Z") } }, // 05:00 BRT = 08:00 UTC
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     });
   });
 
@@ -78,7 +78,7 @@ describe("listTodaysHighlights", () => {
         createdAt: { gte: new Date("2026-08-03T08:00:00.000Z") },
         marketplace: "AMAZON",
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     });
   });
 });
@@ -111,7 +111,7 @@ describe("listHighlightsPage", () => {
         createdAt: { gte: new Date("2026-08-03T08:00:00.000Z") },
         marketplace: { in: ["MERCADO_LIVRE", "AMAZON", "SHOPEE"] },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: 0,
       take: 31,
     });
