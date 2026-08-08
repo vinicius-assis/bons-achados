@@ -1,11 +1,14 @@
 import { describe, it, expect } from "vitest";
 import sharp from "sharp";
+import { createCanvas } from "@napi-rs/canvas";
 import {
   composeStory,
   composeFeedSlide,
   loadMolduraDiagonalStory,
   loadSelo,
   fitTitleText,
+  TITLE_SIDE_MARGIN,
+  FONT_FAMILY,
 } from "@/lib/postdraft/images";
 
 async function fakeProductImage(): Promise<Buffer> {
@@ -72,5 +75,22 @@ describe("fitTitleText", () => {
     const { lines } = fitTitleText(extremeTitle, 1080);
 
     expect(lines.length).toBeLessThanOrEqual(3);
+  });
+
+  it("hard-breaks a single unbreakable word so no line overflows the canvas width", () => {
+    const canvasWidth = 1080;
+    const unbreakableWord = "A".repeat(60);
+    const title = `Fone ${unbreakableWord} Bluetooth`;
+
+    const { lines, fontSize } = fitTitleText(title, canvasWidth);
+
+    const measureCanvas = createCanvas(canvasWidth, 1);
+    const ctx = measureCanvas.getContext("2d");
+    ctx.font = `${fontSize}px "${FONT_FAMILY}"`;
+    const maxTextWidth = canvasWidth - TITLE_SIDE_MARGIN * 2;
+
+    for (const line of lines) {
+      expect(ctx.measureText(line).width).toBeLessThanOrEqual(maxTextWidth);
+    }
   });
 });

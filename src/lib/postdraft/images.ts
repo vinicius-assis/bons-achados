@@ -5,7 +5,7 @@ import { createCanvas, GlobalFonts, type SKRSContext2D } from "@napi-rs/canvas";
 
 const BRAND_KIT_DIR = path.join(process.cwd(), "assets/brand-kit");
 const FONT_PATH = path.join(process.cwd(), "assets/fonts/ArchivoBlack-Regular.ttf");
-const FONT_FAMILY = "Archivo Black";
+export const FONT_FAMILY = "Archivo Black";
 
 const CANVAS_BG = { r: 245, g: 245, b: 245, alpha: 1 };
 const CANVAS_MARGIN_RATIO = 0.06;
@@ -24,7 +24,7 @@ const BAR_HEIGHT = 262;
 const SELO_MARGIN_RATIO = 0.05;
 const SELO_SIZE_RATIO = 0.15;
 
-const TITLE_SIDE_MARGIN = 80;
+export const TITLE_SIDE_MARGIN = 80;
 const TITLE_TOP_MARGIN = 90;
 const TITLE_MAX_LINES = 3;
 const TITLE_START_FONT = 64;
@@ -139,12 +139,48 @@ async function drawPricePill(canvasImage: Buffer, price: number): Promise<Buffer
   return sharp(canvasImage).composite([{ input: pillLayer }]).png().toBuffer();
 }
 
+// Hard-breaks a single word that alone exceeds maxWidth into as many chunks
+// as fit, character-by-character, so it never overflows the canvas.
+function breakLongWord(ctx: SKRSContext2D, word: string, maxWidth: number): string[] {
+  const chunks: string[] = [];
+  let current = "";
+
+  for (const char of word) {
+    const candidate = current + char;
+    if (current && ctx.measureText(candidate).width > maxWidth) {
+      chunks.push(current);
+      current = char;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) {
+    chunks.push(current);
+  }
+
+  return chunks;
+}
+
 function wrapTitleLines(ctx: SKRSContext2D, text: string, maxWidth: number): string[] {
   const words = text.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let current = "";
 
   for (const word of words) {
+    if (ctx.measureText(word).width > maxWidth) {
+      // The word alone doesn't fit even on an empty line: flush what we
+      // have, hard-break the word into chunks, and continue with the last
+      // (possibly partial) chunk as the new current line.
+      if (current) {
+        lines.push(current);
+        current = "";
+      }
+      const chunks = breakLongWord(ctx, word, maxWidth);
+      lines.push(...chunks.slice(0, -1));
+      current = chunks[chunks.length - 1] ?? "";
+      continue;
+    }
+
     const candidate = current ? `${current} ${word}` : word;
     if (current && ctx.measureText(candidate).width > maxWidth) {
       lines.push(current);
@@ -172,7 +208,8 @@ export function fitTitleText(
   for (let fontSize = TITLE_START_FONT; fontSize >= TITLE_MIN_FONT; fontSize -= TITLE_FONT_STEP) {
     ctx.font = `${fontSize}px "${FONT_FAMILY}"`;
     const lines = wrapTitleLines(ctx, title, maxTextWidth);
-    if (lines.length <= TITLE_MAX_LINES) {
+    const fitsWidth = lines.every((line) => ctx.measureText(line).width <= maxTextWidth);
+    if (lines.length <= TITLE_MAX_LINES && fitsWidth) {
       return { lines, fontSize };
     }
   }

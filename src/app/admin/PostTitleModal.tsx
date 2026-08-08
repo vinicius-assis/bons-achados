@@ -6,7 +6,7 @@ type PostTitleModalProps = {
   initialTitle: string;
   submitting: boolean;
   onCancel: () => void;
-  onConfirm: (imageTitle: string) => void;
+  onConfirm: (imageTitle: string) => void | Promise<void>;
 };
 
 export default function PostTitleModal({

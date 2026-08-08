@@ -496,8 +496,8 @@ export default function MercadoLivreAdmin() {
           initialTitle={pendingItem.title}
           submitting={selectingId === pendingItem.id}
           onCancel={() => setPendingItem(null)}
-          onConfirm={(imageTitle) => {
-            void handleSelectForPost(pendingItem, imageTitle);
+          onConfirm={async (imageTitle) => {
+            await handleSelectForPost(pendingItem, imageTitle);
             setPendingItem(null);
           }}
         />
