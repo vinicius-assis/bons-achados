@@ -12,4 +12,5 @@ jobs:
       - name: Call the cleanup endpoint
         run: |
           curl -sf -X POST "${{ secrets.APP_URL }}/api/cron/postdraft-cleanup" \
-            -H "Authorization: Bearer ${{ secrets.POSTDRAFT_CLEANUP_SECRET }}"
+            -H "Authorization: Bearer ${{ secrets.POSTDRAFT_CLEANUP_SECRET }}" \
+            -H "x-vercel-protection-bypass: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}"

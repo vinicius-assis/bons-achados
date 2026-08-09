@@ -12,7 +12,8 @@ jobs:
       - name: Call the collect endpoint
         run: |
           response=$(curl -sf -X POST "${{ secrets.APP_URL }}/api/cron/collect" \
-            -H "Authorization: Bearer ${{ secrets.CRON_COLLECT_SECRET }}")
+            -H "Authorization: Bearer ${{ secrets.CRON_COLLECT_SECRET }}" \
+            -H "x-vercel-protection-bypass: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}")
           echo "$response"
           if echo "$response" | grep -q '"error"'; then
             echo "::error::One or more marketplaces failed to collect"
