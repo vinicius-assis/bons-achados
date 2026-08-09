@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => null);
-  const rawItems = Array.isArray(body?.items) ? body.items : null;
+  const rawItems: unknown[] | null = Array.isArray(body?.items) ? body.items : null;
   if (!rawItems || rawItems.length === 0) {
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });
   }

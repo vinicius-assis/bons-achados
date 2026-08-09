@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/admin/mercadolivre", label: "Hub Mercado Livre" },
   { href: "/admin/amazon", label: "Hub Amazon" },
   { href: "/admin/shopee", label: "Hub Shopee" },
+  { href: "/admin/cadastro", label: "Cadastro manual" },
   { href: "/admin/postar", label: "Postar" },
 ];
 
