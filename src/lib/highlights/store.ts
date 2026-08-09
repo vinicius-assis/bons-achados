@@ -18,6 +18,15 @@ export async function createHighlight(input: CreateHighlightInput): Promise<High
   return prisma.highlight.create({ data: input });
 }
 
+export async function findHighlightByProductId(
+  marketplace: Marketplace,
+  productId: string
+): Promise<Highlight | null> {
+  return prisma.highlight.findUnique({
+    where: { marketplace_productId: { marketplace, productId } },
+  });
+}
+
 export async function listTodaysHighlights(marketplace?: Marketplace): Promise<Highlight[]> {
   return prisma.highlight.findMany({
     where: {

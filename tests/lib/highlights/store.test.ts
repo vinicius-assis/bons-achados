@@ -5,6 +5,7 @@ vi.mock("@/lib/prisma", () => ({
     highlight: {
       create: vi.fn(),
       findMany: vi.fn(),
+      findUnique: vi.fn(),
       deleteMany: vi.fn(),
     },
   },
@@ -13,6 +14,7 @@ vi.mock("@/lib/prisma", () => ({
 import { prisma } from "@/lib/prisma";
 import {
   createHighlight,
+  findHighlightByProductId,
   listTodaysHighlights,
   listHighlightsPage,
   removeHighlight,
@@ -43,6 +45,31 @@ describe("createHighlight", () => {
 
     expect(prisma.highlight.create).toHaveBeenCalledWith({ data: BASE_INPUT });
     expect(result).toEqual({ id: "hl1", ...BASE_INPUT });
+  });
+});
+
+describe("findHighlightByProductId", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("looks up by the compound marketplace+productId key", async () => {
+    vi.mocked(prisma.highlight.findUnique).mockResolvedValue({ id: "hl1" } as never);
+
+    const result = await findHighlightByProductId("AMAZON", "B08N5WRWNW");
+
+    expect(prisma.highlight.findUnique).toHaveBeenCalledWith({
+      where: { marketplace_productId: { marketplace: "AMAZON", productId: "B08N5WRWNW" } },
+    });
+    expect(result).toEqual({ id: "hl1" });
+  });
+
+  it("returns null when no row matches", async () => {
+    vi.mocked(prisma.highlight.findUnique).mockResolvedValue(null);
+
+    const result = await findHighlightByProductId("AMAZON", "NOPE");
+
+    expect(result).toBeNull();
   });
 });
 
