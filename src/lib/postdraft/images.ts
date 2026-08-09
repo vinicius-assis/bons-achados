@@ -24,10 +24,11 @@ const BAR_HEIGHT = 262;
 const SELO_MARGIN_RATIO = 0.05;
 const SELO_SIZE_RATIO = 0.15;
 
-export const TITLE_SIDE_MARGIN = 80;
-const TITLE_TOP_MARGIN = 90;
+export const TITLE_SIDE_MARGIN = 32;
+const TITLE_GAP_ABOVE_PHOTO = 2;
+const TITLE_MIN_TOP = 40;
 const TITLE_MAX_LINES = 3;
-const TITLE_START_FONT = 64;
+const TITLE_START_FONT = 48;
 const TITLE_MIN_FONT = 36;
 const TITLE_FONT_STEP = 4;
 const TITLE_LINE_HEIGHT_RATIO = 1.2;
@@ -67,10 +68,12 @@ export async function fetchImageBuffer(url: string): Promise<Buffer> {
   return Buffer.from(await response.arrayBuffer());
 }
 
+type FittedCanvas = { image: Buffer; photoTop: number };
+
 async function fitOnCanvas(
   productImage: Buffer,
   size: { width: number; height: number }
-): Promise<Buffer> {
+): Promise<FittedCanvas> {
   const maxWidth = Math.round(size.width * (1 - 2 * CANVAS_MARGIN_RATIO));
   const maxHeight = Math.round(size.height * (1 - 2 * CANVAS_MARGIN_RATIO));
 
@@ -82,12 +85,14 @@ async function fitOnCanvas(
   const left = Math.round((size.width - info.width) / 2);
   const top = Math.round((size.height - info.height) / 2);
 
-  return sharp({
+  const image = await sharp({
     create: { width: size.width, height: size.height, channels: 3, background: CANVAS_BG },
   })
     .composite([{ input: resized, left, top }])
     .png()
     .toBuffer();
+
+  return { image, photoTop: top };
 }
 
 async function pasteOverlay(baseImage: Buffer, overlayImage: Buffer): Promise<Buffer> {
@@ -221,32 +226,44 @@ export function fitTitleText(
   };
 }
 
-function drawTitleLayer(title: string, canvasWidth: number, canvasHeight: number): Buffer {
+// Anchored to the bottom (just above the product photo) rather than a fixed
+// top margin, so the title tracks wherever fitOnCanvas placed the photo —
+// which varies with the photo's aspect ratio, since it's centered on the
+// full canvas rather than pinned to the top.
+function drawTitleLayer(
+  title: string,
+  canvasWidth: number,
+  canvasHeight: number,
+  photoTop: number
+): Buffer {
   ensureFontRegistered();
   const canvas = createCanvas(canvasWidth, canvasHeight);
   const ctx = canvas.getContext("2d");
   const { lines, fontSize } = fitTitleText(title, canvasWidth);
 
   ctx.font = `${fontSize}px "${FONT_FAMILY}"`;
-  ctx.textAlign = "left";
+  ctx.textAlign = "center";
   ctx.textBaseline = "top";
   ctx.fillStyle = TITLE_FILL_COLOR;
 
   const lineHeight = fontSize * TITLE_LINE_HEIGHT_RATIO;
+  const blockHeight = lines.length * lineHeight;
+  const startY = Math.max(TITLE_MIN_TOP, photoTop - TITLE_GAP_ABOVE_PHOTO - blockHeight);
+  const centerX = canvasWidth / 2;
 
   lines.forEach((line, index) => {
-    const y = TITLE_TOP_MARGIN + index * lineHeight;
-    ctx.fillText(line, TITLE_SIDE_MARGIN, y);
+    const y = startY + index * lineHeight;
+    ctx.fillText(line, centerX, y);
   });
 
   return canvas.toBuffer("image/png");
 }
 
-async function pasteTitle(canvasImage: Buffer, title: string): Promise<Buffer> {
+async function pasteTitle(canvasImage: Buffer, title: string, photoTop: number): Promise<Buffer> {
   const metadata = await sharp(canvasImage).metadata();
   const width = metadata.width ?? 0;
   const height = metadata.height ?? 0;
-  const titleLayer = drawTitleLayer(title, width, height);
+  const titleLayer = drawTitleLayer(title, width, height, photoTop);
   return sharp(canvasImage).composite([{ input: titleLayer }]).png().toBuffer();
 }
 
@@ -274,10 +291,10 @@ export async function composeStory(
   const molduraMeta = await sharp(molduraImage).metadata();
   const size = { width: molduraMeta.width ?? 1080, height: molduraMeta.height ?? 1920 };
 
-  let canvas = await fitOnCanvas(productImage, size);
-  canvas = await pasteOverlay(canvas, molduraImage);
+  const { image: fitted, photoTop } = await fitOnCanvas(productImage, size);
+  let canvas = await pasteOverlay(fitted, molduraImage);
   canvas = await drawPricePill(canvas, price);
-  canvas = await pasteTitle(canvas, title);
+  canvas = await pasteTitle(canvas, title, photoTop);
 
   return sharp(canvas).jpeg({ quality: 90 }).toBuffer();
 }
@@ -287,8 +304,8 @@ export async function composeFeedSlide(
   seloImage: Buffer,
   title: string
 ): Promise<Buffer> {
-  let canvas = await fitOnCanvas(productImage, FEED_SIZE);
-  canvas = await pasteSelo(canvas, seloImage);
-  canvas = await pasteTitle(canvas, title);
+  const { image: fitted, photoTop } = await fitOnCanvas(productImage, FEED_SIZE);
+  let canvas = await pasteSelo(fitted, seloImage);
+  canvas = await pasteTitle(canvas, title, photoTop);
   return sharp(canvas).jpeg({ quality: 90 }).toBuffer();
 }

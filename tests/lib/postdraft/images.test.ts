@@ -55,7 +55,7 @@ describe("fitTitleText", () => {
     const { lines, fontSize } = fitTitleText("Fone Bluetooth", 1080);
 
     expect(lines).toEqual(["Fone Bluetooth"]);
-    expect(fontSize).toBe(64);
+    expect(fontSize).toBe(48);
   });
 
   it("wraps a long title into at most 3 lines", () => {
