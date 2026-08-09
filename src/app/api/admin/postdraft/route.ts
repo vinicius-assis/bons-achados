@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
   const marketplace = body?.marketplace;
   const source = body?.source;
   const title = typeof body?.title === "string" ? body.title.trim() : "";
+  const imageTitle = typeof body?.imageTitle === "string" ? body.imageTitle.trim() : "";
   const affiliateLink = typeof body?.affiliateLink === "string" ? body.affiliateLink.trim() : "";
   const image = typeof body?.image === "string" ? body.image.trim() : "";
   const price = typeof body?.price === "number" ? body.price : NaN;
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest) {
     !VALID_MARKETPLACES.includes(marketplace) ||
     !VALID_SOURCES.includes(source) ||
     !title ||
+    !imageTitle ||
     !affiliateLink ||
     !image ||
     Number.isNaN(price) ||
@@ -57,6 +59,7 @@ export async function POST(request: NextRequest) {
     marketplace,
     source,
     title,
+    imageTitle,
     affiliateLink,
     image,
     price,

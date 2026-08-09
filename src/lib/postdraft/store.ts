@@ -7,6 +7,7 @@ export type CreatePostDraftInput = {
   marketplace: Marketplace;
   source: ProductSource;
   title: string;
+  imageTitle: string;
   affiliateLink: string;
   image: string;
   price: number;

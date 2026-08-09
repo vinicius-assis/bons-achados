@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import PostTitleModal from "@/app/admin/PostTitleModal";
 
 type PoolItem = {
   id: string;
@@ -33,6 +34,7 @@ export default function ShopeeAdmin() {
   const [selectingId, setSelectingId] = useState<string | null>(null);
   const [selectedForPost, setSelectedForPost] = useState<Record<string, boolean>>({});
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [pendingItem, setPendingItem] = useState<PoolItem | null>(null);
 
   // Loads the pool already collected for this marketplace — a database
   // read, no live Shopee API call.
@@ -90,7 +92,7 @@ export default function ShopeeAdmin() {
     await fetchSearchPage(lastQuery, page + 1, "append");
   }
 
-  async function handleSelectForPost(item: PoolItem) {
+  async function handleSelectForPost(item: PoolItem, imageTitle: string) {
     setSelectingId(item.id);
     setSearchError(null);
     try {
@@ -101,6 +103,7 @@ export default function ShopeeAdmin() {
           marketplace: "SHOPEE",
           source: "AUTO",
           title: item.title,
+          imageTitle,
           affiliateLink: item.affiliateLink,
           image: item.image,
           price: item.price,
@@ -272,7 +275,7 @@ export default function ShopeeAdmin() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleSelectForPost(item)}
+                    onClick={() => setPendingItem(item)}
                     disabled={selectingId === item.id || selectedForPost[item.id]}
                     className="mt-2 w-full rounded-full border border-gold/40 px-4 py-2 font-mono text-[10px] tracking-wider text-gold uppercase transition hover:bg-gold hover:text-ink focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                   >
@@ -309,6 +312,18 @@ export default function ShopeeAdmin() {
           </div>
         )}
       </div>
+
+      {pendingItem && (
+        <PostTitleModal
+          initialTitle={pendingItem.title}
+          submitting={selectingId === pendingItem.id}
+          onCancel={() => setPendingItem(null)}
+          onConfirm={async (imageTitle) => {
+            await handleSelectForPost(pendingItem, imageTitle);
+            setPendingItem(null);
+          }}
+        />
+      )}
     </div>
   );
 }

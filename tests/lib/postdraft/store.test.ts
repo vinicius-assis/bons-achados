@@ -26,6 +26,7 @@ const BASE_INPUT = {
   marketplace: "MERCADO_LIVRE" as const,
   source: "AUTO" as const,
   title: "Creatina 1kg Suplemento",
+  imageTitle: "Creatina 1kg Suplemento",
   affiliateLink: "https://meli.la/abc",
   image: "https://img.example/1.webp",
   price: 59.9,

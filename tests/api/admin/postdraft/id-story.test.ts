@@ -48,11 +48,13 @@ describe("GET /api/admin/postdraft/[id]/story", () => {
     expect(response.status).toBe(404);
   });
 
-  it("composes and returns the story JPEG", async () => {
+  it("composes and returns the story JPEG using imageTitle", async () => {
     vi.mocked(getPostDraftById).mockResolvedValue({
       id: "cd1",
       image: "https://img.example/1.webp",
       price: 59.9,
+      title: "Creatina 1kg",
+      imageTitle: "Creatina em Pó 1kg",
     } as never);
     vi.mocked(fetchImageBuffer).mockResolvedValue(Buffer.from("product-image"));
     vi.mocked(composeStory).mockResolvedValue(Buffer.from("jpeg-bytes"));
@@ -64,6 +66,35 @@ describe("GET /api/admin/postdraft/[id]/story", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("image/jpeg");
-    expect(composeStory).toHaveBeenCalledWith(Buffer.from("product-image"), Buffer.from("moldura"), 59.9);
+    expect(composeStory).toHaveBeenCalledWith(
+      Buffer.from("product-image"),
+      Buffer.from("moldura"),
+      59.9,
+      "Creatina em Pó 1kg"
+    );
+  });
+
+  it("falls back to title when imageTitle is null", async () => {
+    vi.mocked(getPostDraftById).mockResolvedValue({
+      id: "cd1",
+      image: "https://img.example/1.webp",
+      price: 59.9,
+      title: "Creatina 1kg",
+      imageTitle: null,
+    } as never);
+    vi.mocked(fetchImageBuffer).mockResolvedValue(Buffer.from("product-image"));
+    vi.mocked(composeStory).mockResolvedValue(Buffer.from("jpeg-bytes"));
+
+    await GET(
+      new NextRequest("http://localhost/api/admin/postdraft/cd1/story", { headers: authHeader() }),
+      { params: Promise.resolve({ id: "cd1" }) }
+    );
+
+    expect(composeStory).toHaveBeenCalledWith(
+      Buffer.from("product-image"),
+      Buffer.from("moldura"),
+      59.9,
+      "Creatina 1kg"
+    );
   });
 });

@@ -18,6 +18,7 @@ const VALID_BODY = {
   marketplace: "MERCADO_LIVRE",
   source: "AUTO",
   title: "Creatina 1kg",
+  imageTitle: "Creatina 1kg",
   affiliateLink: "https://meli.la/abc",
   image: "https://img.example/1.webp",
   price: 59.9,
@@ -89,6 +90,13 @@ describe("POST /api/admin/postdraft", () => {
 
   it("returns 400 for a missing required field", async () => {
     const response = await POST(buildRequest({ ...VALID_BODY, title: "" }));
+
+    expect(response.status).toBe(400);
+    expect(createPostDraft).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for a missing imageTitle", async () => {
+    const response = await POST(buildRequest({ ...VALID_BODY, imageTitle: "" }));
 
     expect(response.status).toBe(400);
     expect(createPostDraft).not.toHaveBeenCalled();

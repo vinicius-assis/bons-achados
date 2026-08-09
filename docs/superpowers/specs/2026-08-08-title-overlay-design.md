@@ -10,7 +10,7 @@ O usuário quer poder revisar/editar o título do produto no momento da seleçã
 
 ## Objetivo
 
-Ao clicar em "Selecionar para postar", abrir um modal pré-preenchido com o título do card, editável. O texto confirmado é salvo como um campo novo (`imageTitle`) no `PostDraft` e desenhado no topo do story e do feed, como texto puro com sombra/contorno (sem faixa de fundo), quebrando em até 2-3 linhas e reduzindo a fonte se necessário para caber.
+Ao clicar em "Selecionar para postar", abrir um modal pré-preenchido com o título do card, editável. O texto confirmado é salvo como um campo novo (`imageTitle`) no `PostDraft` e desenhado no topo do story e do feed, como texto preto alinhado à esquerda (sem faixa de fundo, sem contorno — ajustado após revisão visual comparando com o layout de posts já publicados), quebrando em até 2-3 linhas e reduzindo a fonte se necessário para caber.
 
 ## Escopo
 
@@ -51,7 +51,7 @@ Componente client, algo como `src/app/admin/PostTitleModal.tsx`: input de texto 
 
 ### 4. Overlay de título (`src/lib/postdraft/images.ts`)
 
-Nova função `drawTitleLayer(title, canvasWidth, canvasHeight)`, no mesmo molde de `drawPricePillLayer` (canvas 2D, fonte Archivo Black já registrada): texto centralizado, sem fundo, com sombra escura (`ctx.shadowColor`/`shadowBlur`) para legibilidade sobre qualquer imagem de produto. Quebra em até 3 linhas dentro da largura útil do canvas (com margem lateral); se não couber em 3 linhas no tamanho de fonte inicial, reduz o tamanho até caber. Posicionado no topo, acima da imagem do produto.
+Nova função `drawTitleLayer(title, canvasWidth, canvasHeight)`, no mesmo molde de `drawPricePillLayer` (canvas 2D, fonte Archivo Black já registrada): texto preto (`#0D1012`), alinhado à esquerda, sem fundo e sem contorno. Quebra em até 3 linhas dentro da largura útil do canvas (com margem lateral); se não couber em 3 linhas no tamanho de fonte inicial, reduz o tamanho até caber. Posicionado no topo, acima da imagem do produto.
 
 `composeStory` e `composeFeedSlide` ganham parâmetro `title: string` e chamam `drawTitleLayer` por último (por cima de moldura/pill ou selo), garantindo que o texto nunca fique coberto.
 

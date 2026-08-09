@@ -17,7 +17,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   const productImage = await fetchImageBuffer(postDraft.image);
-  const jpeg = await composeStory(productImage, loadMolduraDiagonalStory(), postDraft.price);
+  const jpeg = await composeStory(
+    productImage,
+    loadMolduraDiagonalStory(),
+    postDraft.price,
+    postDraft.imageTitle ?? postDraft.title
+  );
 
   return new NextResponse(new Uint8Array(jpeg), {
     headers: {
