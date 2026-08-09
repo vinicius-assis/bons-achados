@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { Highlight } from "@prisma/client";
 import { formatBrazilTime } from "@/lib/date";
+import ScrollToTopButton from "@/components/ScrollToTopButton";
 
 type SortOption = "price-desc" | "price-asc" | "platform";
 
@@ -165,6 +166,8 @@ export default function VitrineHighlights({ highlights }: { highlights: Highligh
           </div>
         ))}
       </div>
+
+      <ScrollToTopButton />
     </div>
   );
 }

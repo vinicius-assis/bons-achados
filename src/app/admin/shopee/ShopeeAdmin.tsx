@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import PostTitleModal from "@/app/admin/PostTitleModal";
+import ScrollToTopButton from "@/components/ScrollToTopButton";
 
 type PoolItem = {
   id: string;
@@ -324,6 +325,8 @@ export default function ShopeeAdmin() {
           }}
         />
       )}
+
+      <ScrollToTopButton />
     </div>
   );
 }

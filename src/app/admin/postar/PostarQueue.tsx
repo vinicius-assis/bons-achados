@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import ScrollToTopButton from "@/components/ScrollToTopButton";
 
 type PostDraftItem = {
   id: string;
@@ -204,6 +205,8 @@ export default function PostarQueue() {
           />
         </div>
       )}
+
+      <ScrollToTopButton />
     </div>
   );
 }
