@@ -37,6 +37,7 @@ export default function AmazonAdmin() {
   const [sessionError, setSessionError] = useState<string | null>(null);
 
   const [items, setItems] = useState<PoolItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -306,12 +307,26 @@ export default function AmazonAdmin() {
           </section>
         )}
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        {items.length > 0 && (
+          <label className="block">
+            <span className="sr-only">Buscar nas ofertas já coletadas</span>
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Buscar nas ofertas já coletadas…"
+              className="w-full rounded-full border border-ink-line bg-ink-raised px-5 py-3 text-sm text-paper placeholder:text-ash/70 focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
+            />
+          </label>
+        )}
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <p aria-live="polite" className="font-mono text-[11px] tracking-[0.2em] text-ash uppercase">
             {loading
               ? "carregando…"
-              : items.length > 0
-                ? `${items.length} oferta${items.length === 1 ? "" : "s"} na vitrine hoje`
+              : filteredItems.length > 0
+                ? `${filteredItems.length} oferta${filteredItems.length === 1 ? "" : "s"}${
+                    trimmedSearchQuery ? " encontrada" + (filteredItems.length === 1 ? "" : "s") : " na vitrine hoje"
+                  }`
                 : ""}
           </p>
           {hasSession && !showSessionForm && (
@@ -340,8 +355,12 @@ export default function AmazonAdmin() {
           </p>
         )}
 
+        {loaded && items.length > 0 && filteredItems.length === 0 && !loading && !loadError && (
+          <p className="mt-10 text-sm text-ash">Nada encontrado para essa busca. Tente outro termo.</p>
+        )}
+
         <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map((item, index) => (
+          {filteredItems.map((item, index) => (
             <article
               key={item.id}
               style={{ animationDelay: `${Math.min(index, 11) * 35}ms` }}
