@@ -31,6 +31,13 @@ export type MLHubItem = {
   commissionLabel: string | null;
 };
 
+export type MLHubSort = "relevance" | "lowest_price" | "highest_price";
+
+export type MLHubFilter =
+  | { id: "category"; value: string; name: string }
+  | { id: "extra_commission"; value: true }
+  | { id: "best_seller"; value: true };
+
 export class MercadoLivreSessionExpiredError extends Error {
   constructor() {
     super("Mercado Livre session expired or invalid");
@@ -112,8 +119,11 @@ function parseCard(card: any): MLHubItem | null {
 export async function searchAffiliateProducts(
   query: string,
   session: MLHubSession,
-  offset: number = 0
+  offset: number = 0,
+  options: { sort?: MLHubSort; filters?: MLHubFilter[] } = {}
 ): Promise<MLHubItem[]> {
+  const { sort = "relevance", filters = [] } = options;
+
   const response = await fetch(HUB_SEARCH_URL, {
     method: "POST",
     headers: {
@@ -127,8 +137,8 @@ export async function searchAffiliateProducts(
     },
     body: JSON.stringify({
       search: query,
-      sort: "relevance",
-      filters: [],
+      sort,
+      filters,
       offset,
     }),
     signal: AbortSignal.timeout(10_000),

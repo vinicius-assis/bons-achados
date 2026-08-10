@@ -95,6 +95,31 @@ describe("searchAffiliateProducts", () => {
     );
   });
 
+  it("sends the given sort and filters instead of defaulting to relevance/empty", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => FIXTURE_RESPONSE,
+    } as Response);
+
+    await searchAffiliateProducts("creatina", session, 0, {
+      sort: "lowest_price",
+      filters: [{ id: "category", value: "MLB5726", name: "Eletrodomésticos" }],
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://www.mercadolivre.com.br/affiliate-program/api/hub/search?is_affiliate=true&device=desktop",
+      expect.objectContaining({
+        body: JSON.stringify({
+          search: "creatina",
+          sort: "lowest_price",
+          filters: [{ id: "category", value: "MLB5726", name: "Eletrodomésticos" }],
+          offset: 0,
+        }),
+      })
+    );
+  });
+
   it("sends the query, cookies, and csrf token, and returns parsed items", async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,

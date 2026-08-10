@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import PostTitleModal from "@/app/admin/PostTitleModal";
 import ScrollToTopButton from "@/components/ScrollToTopButton";
+import { ML_HUB_CATEGORIES } from "@/lib/mercadolivre/categories";
+import { copyToClipboard } from "@/lib/clipboard";
+
+type SortOption = "relevance" | "lowest_price" | "highest_price";
+type FilterMode = "none" | "extra_commission" | "best_seller";
 
 type PoolItem = {
   id: string;
@@ -40,6 +45,9 @@ export default function MercadoLivreAdmin() {
   const [sessionError, setSessionError] = useState<string | null>(null);
 
   const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<SortOption>("relevance");
+  const [categoryId, setCategoryId] = useState("");
+  const [filterMode, setFilterMode] = useState<FilterMode>("none");
   const [items, setItems] = useState<PoolItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
@@ -113,9 +121,20 @@ export default function MercadoLivreAdmin() {
       setLoadingState(true);
       setSearchError(null);
       try {
-        const response = await fetch(
-          `/api/admin/mercadolivre/search?q=${encodeURIComponent(term)}&offset=${offset}`
-        );
+        const params = new URLSearchParams({ q: term, offset: String(offset), sort });
+        if (categoryId) {
+          const category = ML_HUB_CATEGORIES.find((candidate) => candidate.id === categoryId);
+          if (category) {
+            params.set("categoryId", category.id);
+            params.set("categoryName", category.name);
+          }
+        }
+        if (filterMode === "extra_commission") {
+          params.set("extraCommission", "true");
+        } else if (filterMode === "best_seller") {
+          params.set("bestSeller", "true");
+        }
+        const response = await fetch(`/api/admin/mercadolivre/search?${params.toString()}`);
         if (response.status === 401) {
           expireSession();
           return;
@@ -146,7 +165,7 @@ export default function MercadoLivreAdmin() {
         setLoadingState(false);
       }
     },
-    [expireSession]
+    [expireSession, sort, categoryId, filterMode]
   );
 
   async function handleSearch(event: React.FormEvent) {
@@ -157,6 +176,14 @@ export default function MercadoLivreAdmin() {
   async function handleLoadMore() {
     await fetchSearchPage(lastQuery, liveOffset, "append");
   }
+
+  function handleClearFilters() {
+    setSort("relevance");
+    setCategoryId("");
+    setFilterMode("none");
+  }
+
+  const filtersActive = sort !== "relevance" || categoryId !== "" || filterMode !== "none";
 
   async function handleSelectForPost(item: PoolItem, imageTitle: string) {
     setSelectingId(item.id);
@@ -210,13 +237,13 @@ export default function MercadoLivreAdmin() {
   }
 
   async function handleCopy(id: string, link: string) {
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopiedId(id);
-      window.setTimeout(() => setCopiedId(null), 2000);
-    } catch {
+    const succeeded = await copyToClipboard(link);
+    if (!succeeded) {
       setSearchError("O navegador bloqueou a cópia. Selecione o link e copie na mão.");
+      return;
     }
+    setCopiedId(id);
+    window.setTimeout(() => setCopiedId(null), 2000);
   }
 
   const sessionFormVisible = hasSession === false || showSessionForm;
@@ -360,6 +387,79 @@ export default function MercadoLivreAdmin() {
               </button>
             )}
           </form>
+        )}
+
+        {hasSession && (
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <label className="sr-only" htmlFor="ml-sort">
+              Ordenar por
+            </label>
+            <select
+              id="ml-sort"
+              value={sort}
+              onChange={(event) => setSort(event.target.value as SortOption)}
+              className="rounded-full border border-ink-line bg-ink-raised px-4 py-2 font-mono text-xs tracking-wider text-paper uppercase focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
+            >
+              <option value="relevance">Mais relevantes</option>
+              <option value="lowest_price">Menor preço</option>
+              <option value="highest_price">Maior preço</option>
+            </select>
+
+            <label className="sr-only" htmlFor="ml-category">
+              Categoria
+            </label>
+            <select
+              id="ml-category"
+              value={categoryId}
+              onChange={(event) => setCategoryId(event.target.value)}
+              className="rounded-full border border-ink-line bg-ink-raised px-4 py-2 font-mono text-xs tracking-wider text-paper uppercase focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
+            >
+              <option value="">Todas as categorias</option>
+              {ML_HUB_CATEGORIES.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              onClick={() =>
+                setFilterMode((previous) => (previous === "extra_commission" ? "none" : "extra_commission"))
+              }
+              aria-pressed={filterMode === "extra_commission"}
+              className={`rounded-full border px-4 py-2 font-mono text-xs tracking-wider uppercase transition focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none ${
+                filterMode === "extra_commission"
+                  ? "border-gold bg-gold text-ink"
+                  : "border-ink-line bg-ink-raised text-paper hover:border-gold hover:text-gold"
+              }`}
+            >
+              Ganhos extras
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setFilterMode((previous) => (previous === "best_seller" ? "none" : "best_seller"))}
+              aria-pressed={filterMode === "best_seller"}
+              className={`rounded-full border px-4 py-2 font-mono text-xs tracking-wider uppercase transition focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none ${
+                filterMode === "best_seller"
+                  ? "border-gold bg-gold text-ink"
+                  : "border-ink-line bg-ink-raised text-paper hover:border-gold hover:text-gold"
+              }`}
+            >
+              Mais vendidos
+            </button>
+
+            {filtersActive && (
+              <button
+                type="button"
+                onClick={handleClearFilters}
+                className="font-mono text-xs tracking-wider text-ash uppercase transition hover:text-paper focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none"
+              >
+                Limpar filtros
+              </button>
+            )}
+          </div>
         )}
 
         <p aria-live="polite" className="mt-6 font-mono text-[11px] tracking-[0.2em] text-ash uppercase">

@@ -91,7 +91,10 @@ describe("GET /api/admin/mercadolivre/search", () => {
     );
     const body = await response.json();
 
-    expect(searchAffiliateProducts).toHaveBeenCalledWith("fone", session, 18);
+    expect(searchAffiliateProducts).toHaveBeenCalledWith("fone", session, 18, {
+      sort: "relevance",
+      filters: [],
+    });
     expect(mapMercadoLivreItems).toHaveBeenCalledWith([mlItem], session);
     expect(persistItems).toHaveBeenCalledWith("MERCADO_LIVRE", [
       expect.objectContaining({ productId: "MLB1" }),
@@ -108,7 +111,71 @@ describe("GET /api/admin/mercadolivre/search", () => {
 
     await GET(new NextRequest("http://localhost/api/admin/mercadolivre/search", { headers: authHeader() }));
 
-    expect(searchAffiliateProducts).toHaveBeenCalledWith("", session, 0);
+    expect(searchAffiliateProducts).toHaveBeenCalledWith("", session, 0, {
+      sort: "relevance",
+      filters: [],
+    });
+  });
+
+  it("builds the sort and filters from query params", async () => {
+    vi.mocked(getSession).mockResolvedValue(session);
+    vi.mocked(searchAffiliateProducts).mockResolvedValue([]);
+    vi.mocked(mapMercadoLivreItems).mockResolvedValue([]);
+    vi.mocked(findHighlightsByProductIds).mockResolvedValue([]);
+
+    await GET(
+      new NextRequest(
+        "http://localhost/api/admin/mercadolivre/search?sort=lowest_price&categoryId=MLB5726&categoryName=Eletrodom%C3%A9sticos&extraCommission=true",
+        { headers: authHeader() }
+      )
+    );
+
+    expect(searchAffiliateProducts).toHaveBeenCalledWith("", session, 0, {
+      sort: "lowest_price",
+      filters: [
+        { id: "category", value: "MLB5726", name: "Eletrodomésticos" },
+        { id: "extra_commission", value: true },
+      ],
+    });
+  });
+
+  it("prefers bestSeller over extraCommission when both are sent", async () => {
+    vi.mocked(getSession).mockResolvedValue(session);
+    vi.mocked(searchAffiliateProducts).mockResolvedValue([]);
+    vi.mocked(mapMercadoLivreItems).mockResolvedValue([]);
+    vi.mocked(findHighlightsByProductIds).mockResolvedValue([]);
+
+    await GET(
+      new NextRequest(
+        "http://localhost/api/admin/mercadolivre/search?bestSeller=true&extraCommission=true",
+        { headers: authHeader() }
+      )
+    );
+
+    expect(searchAffiliateProducts).toHaveBeenCalledWith("", session, 0, {
+      sort: "relevance",
+      filters: [{ id: "best_seller", value: true }],
+    });
+  });
+
+  it("falls back to relevance for an unrecognized sort value", async () => {
+    vi.mocked(getSession).mockResolvedValue(session);
+    vi.mocked(searchAffiliateProducts).mockResolvedValue([]);
+    vi.mocked(mapMercadoLivreItems).mockResolvedValue([]);
+    vi.mocked(findHighlightsByProductIds).mockResolvedValue([]);
+
+    await GET(
+      new NextRequest("http://localhost/api/admin/mercadolivre/search?sort=bogus", {
+        headers: authHeader(),
+      })
+    );
+
+    expect(searchAffiliateProducts).toHaveBeenCalledWith(
+      "",
+      session,
+      0,
+      expect.objectContaining({ sort: "relevance" })
+    );
   });
 
   it("returns 401 session_expired when MercadoLivreSessionExpiredError is thrown", async () => {
