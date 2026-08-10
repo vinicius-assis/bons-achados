@@ -183,6 +183,16 @@ export default function MercadoLivreAdmin() {
     setFilterMode("none");
   }
 
+  // Once the user has searched at least once, changing a filter re-runs the
+  // search right away instead of waiting for another "Buscar produtos" click.
+  useEffect(() => {
+    if (!searched) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchSearchPage(query, 0, "replace");
+    // Only filter changes should retrigger this, not `query` or `fetchSearchPage`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sort, categoryId, filterMode]);
+
   const filtersActive = sort !== "relevance" || categoryId !== "" || filterMode !== "none";
 
   async function handleSelectForPost(item: PoolItem, imageTitle: string) {
