@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import PostTitleModal from "@/app/admin/PostTitleModal";
 import ScrollToTopButton from "@/components/ScrollToTopButton";
+import { copyToClipboard } from "@/lib/clipboard";
 
 type PoolItem = {
   id: string;
@@ -184,16 +185,20 @@ export default function AmazonAdmin() {
   }
 
   async function handleCopy(id: string, link: string) {
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopiedId(id);
-      window.setTimeout(() => setCopiedId(null), 2000);
-    } catch {
+    const succeeded = await copyToClipboard(link);
+    if (!succeeded) {
       setLoadError("O navegador bloqueou a cópia. Selecione o link e copie na mão.");
+      return;
     }
+    setCopiedId(id);
+    window.setTimeout(() => setCopiedId(null), 2000);
   }
 
   const sessionFormVisible = hasSession === false || showSessionForm;
+  const trimmedSearchQuery = searchQuery.trim().toLowerCase();
+  const filteredItems = trimmedSearchQuery
+    ? items.filter((item) => item.title.toLowerCase().includes(trimmedSearchQuery))
+    : items;
 
   return (
     <div>

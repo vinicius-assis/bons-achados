@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import ScrollToTopButton from "@/components/ScrollToTopButton";
+import { copyToClipboard } from "@/lib/clipboard";
 
 type PostDraftItem = {
   id: string;
@@ -69,23 +70,23 @@ export default function PostarQueue() {
   }
 
   async function handleCopyCaption() {
-    try {
-      await navigator.clipboard.writeText(caption);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
+    const succeeded = await copyToClipboard(caption);
+    if (!succeeded) {
       setError("O navegador bloqueou a cópia. Selecione o texto e copie na mão.");
+      return;
     }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
   }
 
   async function handleCopyLink(itemId: string, link: string) {
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopiedItemId(itemId);
-      window.setTimeout(() => setCopiedItemId(null), 2000);
-    } catch {
+    const succeeded = await copyToClipboard(link);
+    if (!succeeded) {
       setError("O navegador bloqueou a cópia. Selecione o link e copie na mão.");
+      return;
     }
+    setCopiedItemId(itemId);
+    window.setTimeout(() => setCopiedItemId(null), 2000);
   }
 
   if (loading) {
