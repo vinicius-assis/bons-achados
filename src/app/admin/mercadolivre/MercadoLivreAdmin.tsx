@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import PostTitleModal from "@/app/admin/PostTitleModal";
 import ScrollToTopButton from "@/components/ScrollToTopButton";
 import { ML_HUB_CATEGORIES } from "@/lib/mercadolivre/categories";
@@ -183,12 +183,18 @@ export default function MercadoLivreAdmin() {
     setFilterMode("none");
   }
 
-  // Once the user has searched at least once, changing a filter re-runs the
-  // search right away instead of waiting for another "Buscar produtos" click.
+  // Changing a filter re-runs the search after a short debounce, skipping
+  // the initial mount so opening the page doesn't replace the saved pool.
+  const filtersMounted = useRef(false);
   useEffect(() => {
-    if (!searched) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void fetchSearchPage(query, 0, "replace");
+    if (!filtersMounted.current) {
+      filtersMounted.current = true;
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      void fetchSearchPage(query, 0, "replace");
+    }, 400);
+    return () => window.clearTimeout(timeoutId);
     // Only filter changes should retrigger this, not `query` or `fetchSearchPage`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sort, categoryId, filterMode]);
