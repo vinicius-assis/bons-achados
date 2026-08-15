@@ -53,6 +53,14 @@ export async function clearActivePostDrafts(): Promise<number> {
   return result.count;
 }
 
+export async function removePostDraft(id: string): Promise<boolean> {
+  const result = await prisma.postDraft.updateMany({
+    where: { id, postedAt: null },
+    data: { postedAt: new Date() },
+  });
+  return result.count > 0;
+}
+
 export async function deleteStalePostDrafts(): Promise<number> {
   const result = await prisma.postDraft.deleteMany({
     where: { createdAt: { lt: startOfTodayInBrazil() } },

@@ -18,6 +18,41 @@ function formatPrice(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function shuffleByMarketplace(items: PostDraftItem[]): PostDraftItem[] {
+  const groups = new Map<string, PostDraftItem[]>();
+  for (const item of items) {
+    const group = groups.get(item.marketplace);
+    if (group) {
+      group.push(item);
+    } else {
+      groups.set(item.marketplace, [item]);
+    }
+  }
+
+  for (const group of groups.values()) {
+    for (let i = group.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [group[i], group[j]] = [group[j], group[i]];
+    }
+  }
+
+  const queues = Array.from(groups.values());
+  const result: PostDraftItem[] = [];
+  let remaining = queues.length;
+  let index = 0;
+  while (remaining > 0) {
+    const queue = queues[index % queues.length];
+    if (queue.length > 0) {
+      result.push(queue.shift() as PostDraftItem);
+      if (queue.length === 0) {
+        remaining -= 1;
+      }
+    }
+    index += 1;
+  }
+  return result;
+}
+
 export default function PostarQueue() {
   const [items, setItems] = useState<PostDraftItem[]>([]);
   const [caption, setCaption] = useState("");
@@ -26,6 +61,7 @@ export default function PostarQueue() {
   const [clearing, setClearing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
+  const [removingItemId, setRemovingItemId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -69,6 +105,26 @@ export default function PostarQueue() {
     }
   }
 
+  function handleShuffle() {
+    setItems((current) => shuffleByMarketplace(current));
+  }
+
+  async function handleRemoveItem(itemId: string) {
+    setRemovingItemId(itemId);
+    setError(null);
+    try {
+      const response = await fetch(`/api/admin/postdraft/${itemId}`, { method: "DELETE" });
+      if (!response.ok) {
+        throw new Error("remove_failed");
+      }
+      setItems((current) => current.filter((item) => item.id !== itemId));
+    } catch {
+      setError("Não deu para remover o item. Tente de novo.");
+    } finally {
+      setRemovingItemId(null);
+    }
+  }
+
   async function handleCopyCaption() {
     const succeeded = await copyToClipboard(caption);
     if (!succeeded) {
@@ -105,14 +161,24 @@ export default function PostarQueue() {
         <p className="font-mono text-[11px] tracking-[0.2em] text-ash uppercase">
           {items.length} produto{items.length === 1 ? "" : "s"} na fila
         </p>
-        <button
-          type="button"
-          onClick={handleClear}
-          disabled={clearing || items.length === 0}
-          className="rounded-full border border-ink-line bg-ink-raised px-6 py-2.5 font-display font-stretch-condensed text-sm font-black tracking-wide text-paper uppercase italic transition hover:border-alert hover:text-alert focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {clearing ? "Limpando…" : "Limpar lista"}
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={handleShuffle}
+            disabled={items.length === 0}
+            className="rounded-full border border-ink-line bg-ink-raised px-6 py-2.5 font-display font-stretch-condensed text-sm font-black tracking-wide text-paper uppercase italic transition hover:border-gold hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Embaralhar
+          </button>
+          <button
+            type="button"
+            onClick={handleClear}
+            disabled={clearing || items.length === 0}
+            className="rounded-full border border-ink-line bg-ink-raised px-6 py-2.5 font-display font-stretch-condensed text-sm font-black tracking-wide text-paper uppercase italic transition hover:border-alert hover:text-alert focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {clearing ? "Limpando…" : "Limpar lista"}
+          </button>
+        </div>
       </div>
 
       {items.length === 0 && (
@@ -125,7 +191,18 @@ export default function PostarQueue() {
       <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((item) => (
           <div key={item.id} className="overflow-hidden rounded-2xl border border-ink-line bg-ink-raised p-4">
-            <h2 className="line-clamp-2 text-sm leading-snug text-paper">{item.title}</h2>
+            <div className="flex items-start justify-between gap-2">
+              <h2 className="line-clamp-2 text-sm leading-snug text-paper">{item.title}</h2>
+              <button
+                type="button"
+                onClick={() => handleRemoveItem(item.id)}
+                disabled={removingItemId === item.id}
+                aria-label={`Remover ${item.title} da fila`}
+                className="shrink-0 rounded-full bg-ink px-2.5 py-1 font-mono text-[10px] tracking-wider text-ash uppercase transition hover:bg-alert/10 hover:text-alert focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {removingItemId === item.id ? "…" : "×"}
+              </button>
+            </div>
             <p className="mt-1 font-mono text-xs text-gold tabular-nums">
               {formatPrice(item.price)}
               {item.discount ? ` · ${item.discount}% OFF` : ""}
