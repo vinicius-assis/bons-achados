@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import ScrollToTopButton from "@/components/ScrollToTopButton";
 import { copyToClipboard } from "@/lib/clipboard";
+import { buildCaption, type CaptionProduct } from "@/lib/postdraft/caption";
 
 type PostDraftItem = {
   id: string;
@@ -11,8 +12,37 @@ type PostDraftItem = {
   image: string;
   price: number;
   discount: number | null;
-  marketplace: string;
+  marketplace: CaptionProduct["marketplace"];
+  category: string | null;
 };
+
+// Small delay between sequential download triggers — firing them all in the
+// same tick makes some browsers silently drop everything past the first one.
+const BULK_DOWNLOAD_DELAY_MS = 300;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+// Fetches the image as a blob instead of pointing <a download> at the API
+// URL directly — the route serves `Content-Disposition: inline`, which
+// Chrome honors over the anchor's `download` name, so a direct link ignores
+// our selection-order filename.
+async function downloadAsBlob(url: string, filename: string) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error("download_failed");
+  }
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}
 
 function formatPrice(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -55,13 +85,15 @@ function shuffleByMarketplace(items: PostDraftItem[]): PostDraftItem[] {
 
 export default function PostarQueue() {
   const [items, setItems] = useState<PostDraftItem[]>([]);
-  const [caption, setCaption] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
   const [removingItemId, setRemovingItemId] = useState<string | null>(null);
+  const [downloadingStories, setDownloadingStories] = useState(false);
+  const [downloadingFeeds, setDownloadingFeeds] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -73,7 +105,7 @@ export default function PostarQueue() {
       }
       const body = await response.json();
       setItems(body.items);
-      setCaption(body.caption);
+      setSelectedIds([]);
     } catch {
       setError("Não deu para carregar a fila. Tente de novo em alguns segundos.");
     } finally {
@@ -118,10 +150,59 @@ export default function PostarQueue() {
         throw new Error("remove_failed");
       }
       setItems((current) => current.filter((item) => item.id !== itemId));
+      setSelectedIds((current) => current.filter((id) => id !== itemId));
     } catch {
       setError("Não deu para remover o item. Tente de novo.");
     } finally {
       setRemovingItemId(null);
+    }
+  }
+
+  function handleToggleSelect(itemId: string) {
+    setSelectedIds((current) =>
+      current.includes(itemId) ? current.filter((id) => id !== itemId) : [...current, itemId]
+    );
+  }
+
+  function handleSelectAll() {
+    setSelectedIds(items.map((item) => item.id));
+  }
+
+  function handleClearSelection() {
+    setSelectedIds([]);
+  }
+
+  const selectedItems = selectedIds
+    .map((id) => items.find((item) => item.id === id))
+    .filter((item): item is PostDraftItem => item !== undefined);
+  const captionItems = selectedItems.length > 0 ? selectedItems : items;
+  const caption = buildCaption(captionItems);
+  const orderById = new Map(selectedIds.map((id, index) => [id, index + 1]));
+
+  async function handleBulkDownload(kind: "story" | "feed") {
+    const setDownloading = kind === "story" ? setDownloadingStories : setDownloadingFeeds;
+    setDownloading(true);
+    setError(null);
+    let failures = 0;
+    try {
+      const total = selectedItems.length;
+      const pad = String(total).length;
+      for (const [index, item] of selectedItems.entries()) {
+        const order = String(index + 1).padStart(pad, "0");
+        try {
+          await downloadAsBlob(`/api/admin/postdraft/${item.id}/${kind}`, `${kind}-${order}.jpg`);
+        } catch {
+          failures += 1;
+        }
+        if (index < total - 1) {
+          await sleep(BULK_DOWNLOAD_DELAY_MS);
+        }
+      }
+      if (failures > 0) {
+        setError(`${failures} imagem${failures === 1 ? "" : "ns"} não baixaram. Tente de novo.`);
+      }
+    } finally {
+      setDownloading(false);
     }
   }
 
@@ -181,6 +262,49 @@ export default function PostarQueue() {
         </div>
       </div>
 
+      {items.length > 0 && (
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-ink-line bg-ink-raised p-4">
+          <p className="font-mono text-[11px] tracking-[0.2em] text-ash uppercase">
+            {selectedItems.length > 0
+              ? `${selectedItems.length} selecionado${selectedItems.length === 1 ? "" : "s"}`
+              : "nenhum selecionado"}
+          </p>
+          <button
+            type="button"
+            onClick={handleSelectAll}
+            disabled={selectedItems.length === items.length}
+            className="rounded-full border border-ink-line bg-ink px-4 py-1.5 font-mono text-[10px] tracking-wider text-paper uppercase transition hover:border-gold hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Selecionar todos
+          </button>
+          <button
+            type="button"
+            onClick={handleClearSelection}
+            disabled={selectedItems.length === 0}
+            className="rounded-full border border-ink-line bg-ink px-4 py-1.5 font-mono text-[10px] tracking-wider text-paper uppercase transition hover:border-gold hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Limpar seleção
+          </button>
+          <span className="mx-1 h-4 w-px bg-ink-line" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={() => handleBulkDownload("story")}
+            disabled={selectedItems.length === 0 || downloadingStories}
+            className="rounded-full bg-gold px-4 py-1.5 font-mono text-[10px] tracking-wider text-ink uppercase transition hover:bg-paper focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {downloadingStories ? "Baixando…" : "Baixar stories selecionados"}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleBulkDownload("feed")}
+            disabled={selectedItems.length === 0 || downloadingFeeds}
+            className="rounded-full bg-gold px-4 py-1.5 font-mono text-[10px] tracking-wider text-ink uppercase transition hover:bg-paper focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {downloadingFeeds ? "Baixando…" : "Baixar feeds selecionados"}
+          </button>
+        </div>
+      )}
+
       {items.length === 0 && (
         <p className="mt-10 max-w-md text-sm text-ash">
           Nada na fila agora. Cadastre um produto manual ou selecione itens no hub do
@@ -190,9 +314,30 @@ export default function PostarQueue() {
 
       <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((item) => (
-          <div key={item.id} className="overflow-hidden rounded-2xl border border-ink-line bg-ink-raised p-4">
+          <div
+            key={item.id}
+            className={`overflow-hidden rounded-2xl border p-4 transition ${
+              orderById.has(item.id) ? "border-gold bg-ink-raised" : "border-ink-line bg-ink-raised"
+            }`}
+          >
             <div className="flex items-start justify-between gap-2">
-              <h2 className="line-clamp-2 text-sm leading-snug text-paper">{item.title}</h2>
+              <label className="flex min-w-0 items-start gap-2">
+                <span className="relative mt-0.5 shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={orderById.has(item.id)}
+                    onChange={() => handleToggleSelect(item.id)}
+                    aria-label={`Selecionar ${item.title}`}
+                    className="size-4 rounded border-ink-line accent-gold"
+                  />
+                  {orderById.has(item.id) && (
+                    <span className="absolute -top-2 -right-2 flex size-4 items-center justify-center rounded-full bg-gold font-mono text-[9px] font-bold text-ink">
+                      {orderById.get(item.id)}
+                    </span>
+                  )}
+                </span>
+                <h2 className="line-clamp-2 text-sm leading-snug text-paper">{item.title}</h2>
+              </label>
               <button
                 type="button"
                 onClick={() => handleRemoveItem(item.id)}
