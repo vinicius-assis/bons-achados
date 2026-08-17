@@ -110,6 +110,22 @@ Converge para o mesmo padrão de `/admin/mercadolivre` e `/admin/shopee`:
 - Ganha um campo de busca por palavra-chave (hoje não existe, porque o feed de ofertas não precisava de um). Busca manual chama `SearchItems` e grava no mesmo pool via `persistItems` — mesmo comportamento do ML/Shopee.
 - "Selecionar para postar" inalterado (`PostDraft`, fora do escopo deste design).
 
+### Filtros
+
+`SearchItems` aceita filtros nativamente como parâmetros do request — sem custo extra de implementação além de repassar os valores escolhidos no hub. Como a API oferece mais do que o ML/Shopee expõem hoje (categoria + ordenação por preço + exclusividade), o hub Amazon vai além da paridade:
+
+| Filtro na UI | Parâmetro `SearchItems` | Valores |
+|---|---|---|
+| Categoria (`<select>`) | `searchIndex` | Lista fixa por locale (BR): `All`, `Books`, `Computers`, `Electronics`, `HomeAndKitchen`, `KindleStore`, `MobileApps`, `OfficeProducts`, `ToolsAndHomeImprovement`, `VideoGames` — vem hardcoded no componente, igual à lista de termos de busca (`searchTerms.ts`), sem chamada a `GetBrowseNodes` |
+| Ordenar por (`<select>`) | `sortBy` | `Relevance`, `Price:LowToHigh`, `Price:HighToLow`, `AvgCustomerReviews`, `NewestArrivals`, `Featured` |
+| Marca (campo de texto) | `brand` | string livre, passada direto |
+| Preço mín./máx. (dois campos numéricos) | `minPrice`/`maxPrice` | inteiros na menor denominação da moeda (centavos) — o componente converte de R$ digitado pelo usuário para centavos antes de enviar |
+| "Só Prime" (toggle) | `deliveryFlags: ["Prime"]` | omitido quando desligado |
+
+Todos os filtros são opcionais e combináveis — mesmo espírito do `MLHubFilter[]` do ML (`src/lib/mercadolivre/hubClient.ts`), mas sem a regra de exclusividade mútua do ML (`best_seller`/`extra_commission`), porque os filtros da Amazon não têm essa restrição nativa.
+
+`GET /api/admin/amazon/search` recebe `q`, `page`, `searchIndex`, `sortBy`, `brand`, `minPrice`, `maxPrice`, `prime` como query params, monta o objeto de parâmetros do `SearchItems` e segue o mesmo fluxo (`persistItems` → retorna os `Highlight` gravados/atualizados).
+
 ## Modelo de dados
 
 `Highlight` ganha `updatedAt`, necessário para o gatilho de refresh por idade e para auditar frescor de dados:
@@ -141,12 +157,12 @@ model Highlight {
 Novo:
 - `src/lib/amazon/creatorsApiClient.ts` — `fetchAccessToken()`, `searchItems(term, page, token)`, `getItems(asins, token)`; parsing de `SearchItemsProduct`/`GetItemsProduct` para `AmazonDealItem` (mesmo shape usado hoje, reaproveitado).
 - `src/lib/collect/amazon.ts` — `collectAmazon()` reescrito para usar `searchItems` em vez de `listDeals`; ganha `refreshAmazonPrices()` (busca `Highlight` de `AMAZON` com `updatedAt` velho, chama `getItems` em lotes de 10, atualiza).
-- `src/app/api/admin/amazon/search/route.ts` — substitui `deals/route.ts`; `GET ?q=` chama `searchItems` + `persistItems`, mesmo padrão de `/api/admin/mercadolivre/search`.
+- `src/app/api/admin/amazon/search/route.ts` — substitui `deals/route.ts`; `GET ?q=&searchIndex=&sortBy=&brand=&minPrice=&maxPrice=&prime=` chama `searchItems` + `persistItems`, mesmo padrão de `/api/admin/mercadolivre/search` (ver seção "Filtros").
 
 Alterado:
 - `src/lib/collect/persist.ts` — `persistItems` passa de `createMany({skipDuplicates: true})` para upsert por item (loop com `prisma.highlight.upsert`).
 - `src/app/api/cron/collect/route.ts` — `collectAmazon()` chama internamente a descoberta + o refresh; assinatura de `POST` não muda.
-- `src/app/admin/amazon/AmazonAdmin.tsx` — perde a tela/estado de sessão, ganha campo de busca, carrega pool automaticamente ao montar (mesmo padrão de `MercadoLivreAdmin.tsx`).
+- `src/app/admin/amazon/AmazonAdmin.tsx` — perde a tela/estado de sessão, ganha campo de busca + controles de filtro (categoria, ordenação, marca, faixa de preço, toggle Prime — ver seção "Filtros"), carrega pool automaticamente ao montar (mesmo padrão de `MercadoLivreAdmin.tsx`).
 
 Removido:
 - `src/lib/amazon/session.ts`, `src/lib/amazon/parseCurl.ts`, `src/lib/amazon/hubClient.ts` (versão cookie), `src/app/api/admin/amazon/session/route.ts`, `src/app/api/admin/amazon/deals/route.ts`.
@@ -171,7 +187,7 @@ Removido:
 - `persistItems`: novo caso — item já existente é atualizado (`price`/`oldPrice`/`discount`/`updatedAt`), não duplicado; item novo continua sendo inserido normalmente. Cobre os três marketplaces.
 - `collectAmazon`: paginação até 50 itens via `searchItems`; propagação de erro de auth/429 como `CollectResult.error`.
 - `refreshAmazonPrices`: só seleciona itens com `updatedAt` mais velho que o limiar; agrupa em lotes de até 10; atualiza campos de oferta sem tocar em `title`/`image`/`affiliateLink`.
-- `/api/admin/amazon/search`: mesmo padrão de teste já existente para `/api/admin/mercadolivre/search`.
+- `/api/admin/amazon/search`: mesmo padrão de teste já existente para `/api/admin/mercadolivre/search`, mais casos cobrindo que cada filtro (`searchIndex`, `sortBy`, `brand`, `minPrice`/`maxPrice`, `prime`) é repassado corretamente aos parâmetros do `SearchItems`, e que filtros omitidos não entram no request.
 
 ## Verificação manual
 
