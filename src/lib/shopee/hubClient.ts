@@ -1,8 +1,15 @@
 import { shopeeRequest } from "@/lib/shopee/client";
 
 const SEARCH_QUERY = `
-  query SearchOffers($keyword: String!, $page: Int!) {
-    productOfferV2(keyword: $keyword, sortType: 1, page: $page, limit: 20) {
+  query SearchOffers($keyword: String, $page: Int!, $productCatId: Int, $isAMSOffer: Boolean, $sortType: Int!) {
+    productOfferV2(
+      keyword: $keyword
+      sortType: $sortType
+      page: $page
+      limit: 20
+      productCatId: $productCatId
+      isAMSOffer: $isAMSOffer
+    ) {
       nodes {
         itemId
         commissionRate
@@ -86,16 +93,22 @@ function parseNode(node: RawNode): ShopeeHubItem | null {
 
 export async function searchProducts(
   keyword: string,
-  page: number
+  page: number,
+  options: { categoryId?: string; exclusive?: boolean } = {}
 ): Promise<{ items: ShopeeHubItem[]; hasNextPage: boolean }> {
   const trimmedKeyword = keyword.trim();
-  if (!trimmedKeyword) {
+  if (!trimmedKeyword && !options.categoryId && !options.exclusive) {
     return { items: [], hasNextPage: false };
   }
 
+  // RELEVANCE_DESC (1) only applies to keyword search; without a keyword we
+  // sort by sales instead so category/exclusive-only browsing stays useful.
   const response = await shopeeRequest<SearchResponse>(SEARCH_QUERY, {
-    keyword: trimmedKeyword,
+    keyword: trimmedKeyword || undefined,
     page,
+    productCatId: options.categoryId ? Number(options.categoryId) : undefined,
+    isAMSOffer: options.exclusive ? true : undefined,
+    sortType: trimmedKeyword ? 1 : 2,
   });
 
   const items = response.productOfferV2.nodes

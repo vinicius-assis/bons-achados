@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import PostTitleModal from "@/app/admin/PostTitleModal";
 import ScrollToTopButton from "@/components/ScrollToTopButton";
+import { SHOPEE_HUB_CATEGORIES } from "@/lib/shopee/categories";
 import { copyToClipboard } from "@/lib/clipboard";
 
 type PoolItem = {
@@ -22,6 +23,8 @@ function formatPrice(value: number): string {
 
 export default function ShopeeAdmin() {
   const [query, setQuery] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [exclusive, setExclusive] = useState(false);
   const [items, setItems] = useState<PoolItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
@@ -55,9 +58,14 @@ export default function ShopeeAdmin() {
     setLoadingState(true);
     setSearchError(null);
     try {
-      const response = await fetch(
-        `/api/admin/shopee/search?q=${encodeURIComponent(term)}&page=${targetPage}`
-      );
+      const params = new URLSearchParams({ q: term, page: String(targetPage) });
+      if (categoryId) {
+        params.set("categoryId", categoryId);
+      }
+      if (exclusive) {
+        params.set("exclusive", "true");
+      }
+      const response = await fetch(`/api/admin/shopee/search?${params.toString()}`);
       const body = await response.json();
       if (!response.ok) {
         throw new Error("search_failed");
@@ -83,7 +91,7 @@ export default function ShopeeAdmin() {
     } finally {
       setLoadingState(false);
     }
-  }, []);
+  }, [categoryId, exclusive]);
 
   async function handleSearch(event: React.FormEvent) {
     event.preventDefault();
@@ -93,6 +101,29 @@ export default function ShopeeAdmin() {
   async function handleLoadMore() {
     await fetchSearchPage(lastQuery, page + 1, "append");
   }
+
+  function handleClearFilters() {
+    setCategoryId("");
+    setExclusive(false);
+  }
+
+  // Changing a filter re-runs the search after a short debounce, skipping
+  // the initial mount so opening the page doesn't replace the saved pool.
+  const filtersMounted = useRef(false);
+  useEffect(() => {
+    if (!filtersMounted.current) {
+      filtersMounted.current = true;
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      void fetchSearchPage(query, 1, "replace");
+    }, 400);
+    return () => window.clearTimeout(timeoutId);
+    // Only filter changes should retrigger this, not `query` or `fetchSearchPage`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoryId, exclusive]);
+
+  const filtersActive = categoryId !== "" || exclusive;
 
   async function handleSelectForPost(item: PoolItem, imageTitle: string) {
     setSelectingId(item.id);
@@ -184,6 +215,48 @@ export default function ShopeeAdmin() {
             {searching ? "Buscando…" : "Buscar produtos"}
           </button>
         </form>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <label className="sr-only" htmlFor="shopee-category">
+            Categoria
+          </label>
+          <select
+            id="shopee-category"
+            value={categoryId}
+            onChange={(event) => setCategoryId(event.target.value)}
+            className="rounded-full border border-ink-line bg-ink-raised px-4 py-2 font-mono text-xs tracking-wider text-paper uppercase focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
+          >
+            <option value="">Todas as categorias</option>
+            {SHOPEE_HUB_CATEGORIES.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </select>
+
+          <button
+            type="button"
+            onClick={() => setExclusive((previous) => !previous)}
+            aria-pressed={exclusive}
+            className={`rounded-full border px-4 py-2 font-mono text-xs tracking-wider uppercase transition focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none ${
+              exclusive
+                ? "border-gold bg-gold text-ink"
+                : "border-ink-line bg-ink-raised text-paper hover:border-gold hover:text-gold"
+            }`}
+          >
+            Ofertas exclusivas
+          </button>
+
+          {filtersActive && (
+            <button
+              type="button"
+              onClick={handleClearFilters}
+              className="font-mono text-xs tracking-wider text-ash uppercase transition hover:text-paper focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none"
+            >
+              Limpar filtros
+            </button>
+          )}
+        </div>
 
         <p aria-live="polite" className="mt-6 font-mono text-[11px] tracking-[0.2em] text-ash uppercase">
           {loading || searching

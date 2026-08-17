@@ -12,9 +12,11 @@ export async function GET(request: NextRequest) {
   const keyword = request.nextUrl.searchParams.get("q") ?? "";
   const rawPage = Number(request.nextUrl.searchParams.get("page"));
   const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+  const categoryId = request.nextUrl.searchParams.get("categoryId") ?? undefined;
+  const exclusive = request.nextUrl.searchParams.get("exclusive") === "true";
 
   try {
-    const { items, hasNextPage } = await searchProducts(keyword, page);
+    const { items, hasNextPage } = await searchProducts(keyword, page, { categoryId, exclusive });
     await persistItems("SHOPEE", mapShopeeItems(items));
     const rows = await findHighlightsByProductIds("SHOPEE", items.map((item) => item.itemId));
     return NextResponse.json({ items: rows, hasNextPage });
