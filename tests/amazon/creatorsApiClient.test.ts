@@ -1,5 +1,19 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { fetchAccessToken, searchItems, getItems, AmazonCreatorsApiError } from "@/lib/amazon/creatorsApiClient";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import {
+  fetchAccessToken,
+  searchItems,
+  getItems,
+  AmazonCreatorsApiError,
+  __resetRequestPacerForTests,
+} from "@/lib/amazon/creatorsApiClient";
+
+// The pacer's "last request" timestamp is module-level state shared across
+// every test in this file. Reset it before each test so pacing delays from
+// one test never bleed into the next — these tests only care about request
+// shape/parsing, not real-time spacing (that's covered in "request pacing").
+beforeEach(() => {
+  __resetRequestPacerForTests();
+});
 
 describe("fetchAccessToken", () => {
   afterEach(() => {
@@ -252,5 +266,59 @@ describe("getItems", () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({}) } as Response);
 
     expect(await getItems(["B01"], "token")).toEqual([]);
+  });
+});
+
+describe("request pacing", () => {
+  beforeEach(() => {
+    __resetRequestPacerForTests();
+    vi.useFakeTimers();
+    process.env.AMAZON_CREATORS_CLIENT_ID = "client-id";
+    process.env.AMAZON_CREATORS_CLIENT_SECRET = "client-secret";
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ access_token: "tok" }),
+    } as Response);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    delete process.env.AMAZON_CREATORS_CLIENT_ID;
+    delete process.env.AMAZON_CREATORS_CLIENT_SECRET;
+  });
+
+  it("spaces two back-to-back requests by ~1100ms", async () => {
+    const first = fetchAccessToken();
+    await vi.advanceTimersByTimeAsync(0);
+    await first;
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    const second = fetchAccessToken();
+
+    // Not enough time has passed yet — the second call must still be waiting.
+    await vi.advanceTimersByTimeAsync(500);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    // Advancing past the full interval lets the second call proceed.
+    await vi.advanceTimersByTimeAsync(600);
+    await second;
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not wait when the interval has already elapsed", async () => {
+    const first = fetchAccessToken();
+    await vi.advanceTimersByTimeAsync(0);
+    await first;
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    // Let plenty of real (fake) time pass between requests.
+    await vi.advanceTimersByTimeAsync(5000);
+
+    const second = fetchAccessToken();
+    // No further timer advance needed — the call should resolve immediately.
+    await vi.advanceTimersByTimeAsync(0);
+    await second;
+    expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 });

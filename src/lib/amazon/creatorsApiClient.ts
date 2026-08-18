@@ -3,6 +3,28 @@ const API_BASE_URL = "https://creatorsapi.amazon";
 const MARKETPLACE = "www.amazon.com.br";
 const REQUEST_TIMEOUT_MS = 10_000;
 
+// Amazon's Creators API (and the LwA token endpoint, which shares the same
+// account-level budget) is rate-limited to ~1 transaction per second. This
+// pacer makes sure every outbound request — token fetch, searchItems,
+// getItems — is spaced at least MIN_REQUEST_INTERVAL_MS apart, regardless of
+// how many calls a single cron cycle fires off.
+const MIN_REQUEST_INTERVAL_MS = 1100;
+let lastRequestAt = 0;
+
+async function paceRequest(): Promise<void> {
+  const waitMs = lastRequestAt + MIN_REQUEST_INTERVAL_MS - Date.now();
+  if (waitMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+  }
+  lastRequestAt = Date.now();
+}
+
+// Test-only: resets the module-level pacer state so test files don't pay for
+// real (or fake-timer) delays carried over from previous tests.
+export function __resetRequestPacerForTests(): void {
+  lastRequestAt = 0;
+}
+
 export class AmazonCreatorsApiError extends Error {
   rateLimited: boolean;
   constructor(message: string, rateLimited = false) {
@@ -19,6 +41,7 @@ export async function fetchAccessToken(): Promise<string> {
     throw new Error("AMAZON_CREATORS_CLIENT_ID/SECRET is not set");
   }
 
+  await paceRequest();
   const response = await fetch(TOKEN_URL, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -98,6 +121,7 @@ function requirePartnerTag(): string {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function callCreatorsApi(path: string, body: Record<string, unknown>, token: string): Promise<any> {
+  await paceRequest();
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
     headers: {

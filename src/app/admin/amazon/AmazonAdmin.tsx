@@ -118,6 +118,13 @@ export default function AmazonAdmin() {
       filtersMounted.current = true;
       return;
     }
+    // SearchItems requires at least one of keywords/brand (among other
+    // alternatives we don't expose) to be non-empty. Without that, an
+    // auto-triggered search would carry only sort/category/price/prime
+    // params, which the API rejects.
+    if (query.trim().length === 0 && brand.trim().length === 0) {
+      return;
+    }
     const timeoutId = window.setTimeout(() => {
       void runSearch();
     }, 400);

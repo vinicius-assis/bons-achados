@@ -17,8 +17,14 @@ function parseFilters(searchParams: URLSearchParams): AmazonSearchFilters {
   if (searchIndex) filters.searchIndex = searchIndex;
   if (sortBy) filters.sortBy = sortBy;
   if (brand) filters.brand = brand;
-  if (minPrice) filters.minPrice = Number(minPrice);
-  if (maxPrice) filters.maxPrice = Number(maxPrice);
+  if (minPrice) {
+    const parsed = Number(minPrice);
+    if (Number.isFinite(parsed)) filters.minPrice = parsed;
+  }
+  if (maxPrice) {
+    const parsed = Number(maxPrice);
+    if (Number.isFinite(parsed)) filters.maxPrice = parsed;
+  }
   if (prime === "true") filters.prime = true;
 
   return filters;

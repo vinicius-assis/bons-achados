@@ -32,13 +32,19 @@ function mapAmazonItems(items: AmazonDealItem[]): CollectItem[] {
 }
 
 export async function refreshAmazonPrices(): Promise<{ refreshed: number; error?: string }> {
-  const staleRows = await prisma.highlight.findMany({
-    where: {
-      marketplace: "AMAZON",
-      updatedAt: { lt: new Date(Date.now() - STALE_THRESHOLD_MS) },
-    },
-    select: { id: true, productId: true },
-  });
+  let staleRows: { id: string; productId: string }[];
+  try {
+    staleRows = await prisma.highlight.findMany({
+      where: {
+        marketplace: "AMAZON",
+        updatedAt: { lt: new Date(Date.now() - STALE_THRESHOLD_MS) },
+      },
+      select: { id: true, productId: true },
+    });
+  } catch (error) {
+    console.error("refreshAmazonPrices failed to query stale rows:", error);
+    return { refreshed: 0, error: "collect_failed" };
+  }
 
   if (staleRows.length === 0) {
     return { refreshed: 0 };
@@ -54,27 +60,50 @@ export async function refreshAmazonPrices(): Promise<{ refreshed: number; error?
 
   const rowsByAsin = new Map(staleRows.map((row) => [row.productId, row]));
   let refreshed = 0;
+  let batchError: string | undefined;
 
   for (const batch of chunk(staleRows, REFRESH_BATCH_SIZE)) {
     try {
       const freshItems = await getItems(batch.map((row) => row.productId), token);
+      const seenAsins = new Set<string>();
       for (const item of freshItems) {
         const row = rowsByAsin.get(item.asin);
         if (!row) {
           continue;
         }
+        seenAsins.add(item.asin);
         await prisma.highlight.update({
           where: { id: row.id },
           data: { price: item.price, oldPrice: item.oldPrice, discount: item.discount },
         });
         refreshed++;
       }
+
+      // Rows in this batch that never came back (delisted ASINs) would stay
+      // "stale" forever and get re-batched into every future refresh cycle.
+      // Bump just their updatedAt so they age out for another cycle instead.
+      for (const row of batch) {
+        if (!seenAsins.has(row.productId)) {
+          await prisma.highlight.update({
+            where: { id: row.id },
+            data: { updatedAt: new Date() },
+          });
+        }
+      }
     } catch (error) {
+      if (error instanceof AmazonCreatorsApiError && error.rateLimited) {
+        console.error("refreshAmazonPrices rate limited, stopping remaining batches:", error);
+        batchError = "rate_limited";
+        break;
+      }
       console.error("refreshAmazonPrices batch failed:", error);
+      if (!batchError) {
+        batchError = "refresh_failed";
+      }
     }
   }
 
-  return { refreshed };
+  return batchError ? { refreshed, error: batchError } : { refreshed };
 }
 
 export async function collectAmazon(): Promise<CollectResult> {
@@ -110,7 +139,17 @@ export async function collectAmazon(): Promise<CollectResult> {
     }
   }
 
-  await refreshAmazonPrices();
+  try {
+    const refreshResult = await refreshAmazonPrices();
+    if (refreshResult.error && !discoveryResult.error) {
+      discoveryResult.error = refreshResult.error;
+    }
+  } catch (error) {
+    // Belt-and-suspenders: refreshAmazonPrices() should never throw (it
+    // catches its own failures), but collectAmazon() must still return the
+    // discovery result even if it somehow does.
+    console.error("collectAmazon: refreshAmazonPrices unexpectedly threw:", error);
+  }
 
   return discoveryResult;
 }

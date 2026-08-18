@@ -115,6 +115,19 @@ describe("GET /api/admin/amazon/search", () => {
     });
   });
 
+  it("omits minPrice/maxPrice entirely when given non-numeric values, instead of sending NaN", async () => {
+    vi.mocked(fetchAccessToken).mockResolvedValue("token-abc");
+    vi.mocked(searchItems).mockResolvedValue([]);
+    vi.mocked(findHighlightsByProductIds).mockResolvedValue([]);
+
+    await GET(buildRequest({ q: "fone", minPrice: "abc", maxPrice: "xyz" }));
+
+    const filtersArg = vi.mocked(searchItems).mock.calls[0][3];
+    expect(filtersArg).not.toHaveProperty("minPrice");
+    expect(filtersArg).not.toHaveProperty("maxPrice");
+    expect(searchItems).toHaveBeenCalledWith("fone", 1, "token-abc", {});
+  });
+
   it("returns 429 rate_limited when the Creators API rate-limits the request", async () => {
     vi.mocked(fetchAccessToken).mockResolvedValue("token-abc");
     vi.mocked(searchItems).mockRejectedValue(new AmazonCreatorsApiError("rate limited", true));
