@@ -1,12 +1,13 @@
-import { getSession } from "@/lib/amazon/session";
-import { listDeals, AmazonSessionExpiredError, type AmazonDealItem } from "@/lib/amazon/hubClient";
-import { parseDiscountPercentage } from "@/lib/mercadolivre/discountLabel";
+import { fetchAccessToken, searchItems, AmazonCreatorsApiError, type AmazonDealItem } from "@/lib/amazon/creatorsApiClient";
 import { persistItems } from "@/lib/collect/persist";
+import { pickRandomSearchTerm } from "@/lib/collect/searchTerms";
 import type { CollectItem, CollectResult } from "@/lib/collect/types";
 
 const TARGET_ITEM_COUNT = 50;
+const ITEMS_PER_PAGE = 10;
+const MAX_PAGES = 5;
 
-export function mapAmazonItems(items: AmazonDealItem[]): CollectItem[] {
+function mapAmazonItems(items: AmazonDealItem[]): CollectItem[] {
   return items.map((item) => ({
     productId: item.asin,
     title: item.title,
@@ -14,28 +15,23 @@ export function mapAmazonItems(items: AmazonDealItem[]): CollectItem[] {
     image: item.image,
     price: item.price,
     oldPrice: item.oldPrice,
-    discount: parseDiscountPercentage(item.discountLabel),
+    discount: item.discount,
   }));
 }
 
 export async function collectAmazon(): Promise<CollectResult> {
-  const session = await getSession();
-  if (!session) {
-    return { attempted: 0, inserted: 0, skipped: 0, error: "no_session" };
-  }
+  const searchTerm = pickRandomSearchTerm();
 
   try {
+    const token = await fetchAccessToken();
+
     const fetched: AmazonDealItem[] = [];
-    let offset = 0;
-    let nextIndex: number | null = 0;
-    while (fetched.length < TARGET_ITEM_COUNT && nextIndex !== null) {
-      const page = await listDeals(offset, session);
-      if (page.items.length === 0) {
+    for (let page = 1; page <= MAX_PAGES && fetched.length < TARGET_ITEM_COUNT; page++) {
+      const pageItems = await searchItems(searchTerm, page, token);
+      fetched.push(...pageItems);
+      if (pageItems.length < ITEMS_PER_PAGE) {
         break;
       }
-      fetched.push(...page.items);
-      nextIndex = page.nextIndex;
-      offset = page.nextIndex ?? offset;
     }
     const items = fetched.slice(0, TARGET_ITEM_COUNT);
 
@@ -47,8 +43,8 @@ export async function collectAmazon(): Promise<CollectResult> {
     const { inserted, skipped } = await persistItems("AMAZON", mapped);
     return { attempted: items.length, inserted, skipped };
   } catch (error) {
-    if (error instanceof AmazonSessionExpiredError) {
-      return { attempted: 0, inserted: 0, skipped: 0, error: "session_expired" };
+    if (error instanceof AmazonCreatorsApiError && error.rateLimited) {
+      return { attempted: 0, inserted: 0, skipped: 0, error: "rate_limited" };
     }
     console.error("collectAmazon failed:", error);
     return { attempted: 0, inserted: 0, skipped: 0, error: "collect_failed" };
