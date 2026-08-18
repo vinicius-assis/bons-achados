@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     highlight: {
-      upsert: vi.fn(),
+      createMany: vi.fn(),
       findMany: vi.fn(),
     },
   },
@@ -32,53 +32,50 @@ describe("persistItems", () => {
   });
 
   it("drops items with no image before writing", async () => {
-    vi.mocked(prisma.highlight.upsert).mockResolvedValue({} as never);
+    vi.mocked(prisma.highlight.createMany).mockResolvedValue({ count: 1 } as never);
 
     const result = await persistItems("MERCADO_LIVRE", [ITEM, { ...ITEM, productId: "MLB2", image: "" }]);
 
-    expect(prisma.highlight.upsert).toHaveBeenCalledTimes(1);
-    expect(prisma.highlight.upsert).toHaveBeenCalledWith({
-      where: { marketplace_productId: { marketplace: "MERCADO_LIVRE", productId: "MLB1" } },
-      create: {
-        marketplace: "MERCADO_LIVRE",
-        productId: "MLB1",
-        title: "Creatina 1kg",
-        affiliateLink: "https://meli.la/abc",
-        image: "https://img.example/1.webp",
-        price: 59.9,
-        oldPrice: 89.9,
-        discount: 33,
-        note: "Ótimo custo-benefício para quem busca praticidade.",
-      },
-      update: {
-        price: 59.9,
-        oldPrice: 89.9,
-        discount: 33,
-      },
+    expect(prisma.highlight.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          marketplace: "MERCADO_LIVRE",
+          productId: "MLB1",
+          title: "Creatina 1kg",
+          affiliateLink: "https://meli.la/abc",
+          image: "https://img.example/1.webp",
+          price: 59.9,
+          oldPrice: 89.9,
+          discount: 33,
+          note: "Ótimo custo-benefício para quem busca praticidade.",
+        },
+      ],
+      skipDuplicates: true,
     });
     expect(result).toEqual({ inserted: 1, skipped: 1 });
   });
 
   it("drops items with a non-positive price before writing", async () => {
+    vi.mocked(prisma.highlight.createMany).mockResolvedValue({ count: 0 } as never);
+
     const result = await persistItems("AMAZON", [{ ...ITEM, price: 0 }]);
 
-    expect(prisma.highlight.upsert).not.toHaveBeenCalled();
+    expect(prisma.highlight.createMany).not.toHaveBeenCalled();
     expect(result).toEqual({ inserted: 0, skipped: 1 });
   });
 
-  it("upserts every valid item, even repeated productIds across the same batch", async () => {
-    vi.mocked(prisma.highlight.upsert).mockResolvedValue({} as never);
+  it("counts duplicates skipped by the database as skipped", async () => {
+    vi.mocked(prisma.highlight.createMany).mockResolvedValue({ count: 1 } as never);
 
-    const result = await persistItems("SHOPEE", [ITEM, { ...ITEM, price: 49.9 }]);
+    const result = await persistItems("SHOPEE", [ITEM, { ...ITEM, productId: "MLB2" }]);
 
-    expect(prisma.highlight.upsert).toHaveBeenCalledTimes(2);
-    expect(result).toEqual({ inserted: 2, skipped: 0 });
+    expect(result).toEqual({ inserted: 1, skipped: 1 });
   });
 
   it("returns zero/zero for an empty item list without calling the database", async () => {
     const result = await persistItems("AMAZON", []);
 
-    expect(prisma.highlight.upsert).not.toHaveBeenCalled();
+    expect(prisma.highlight.createMany).not.toHaveBeenCalled();
     expect(result).toEqual({ inserted: 0, skipped: 0 });
   });
 });

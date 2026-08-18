@@ -1,24 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import PostTitleModal from "@/app/admin/PostTitleModal";
 import ScrollToTopButton from "@/components/ScrollToTopButton";
 import { copyToClipboard } from "@/lib/clipboard";
-
-type SortOption = "Relevance" | "Price:LowToHigh" | "Price:HighToLow" | "AvgCustomerReviews" | "NewestArrivals";
-
-const SEARCH_INDEXES = [
-  { value: "", label: "Todas as categorias" },
-  { value: "Books", label: "Livros" },
-  { value: "Computers", label: "Computadores e Informática" },
-  { value: "Electronics", label: "Eletrônicos" },
-  { value: "HomeAndKitchen", label: "Casa e Cozinha" },
-  { value: "KindleStore", label: "Loja Kindle" },
-  { value: "MobileApps", label: "Apps e Jogos" },
-  { value: "OfficeProducts", label: "Material para Escritório e Papelaria" },
-  { value: "ToolsAndHomeImprovement", label: "Ferramentas e Materiais de Construção" },
-  { value: "VideoGames", label: "Games" },
-];
 
 type PoolItem = {
   id: string;
@@ -35,20 +20,30 @@ function formatPrice(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function StatusDot({ active }: { active: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`size-2 rounded-full ${active ? "bg-gold" : "bg-alert"}`}
+    />
+  );
+}
+
 export default function AmazonAdmin() {
-  const [query, setQuery] = useState("");
-  const [sortBy, setSortBy] = useState<SortOption>("Relevance");
-  const [searchIndex, setSearchIndex] = useState("");
-  const [brand, setBrand] = useState("");
-  const [minPrice, setMinPrice] = useState("");
-  const [maxPrice, setMaxPrice] = useState("");
-  const [primeOnly, setPrimeOnly] = useState(false);
+  const [hasSession, setHasSession] = useState<boolean | null>(null);
+  const [showSessionForm, setShowSessionForm] = useState(false);
+  const [curlCommand, setCurlCommand] = useState("");
+  const [savingSession, setSavingSession] = useState(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
   const [items, setItems] = useState<PoolItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [searching, setSearching] = useState(false);
-  const [searched, setSearched] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextOffset, setNextOffset] = useState(0);
+  const [noMorePages, setNoMorePages] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectingId, setSelectingId] = useState<string | null>(null);
@@ -56,88 +51,92 @@ export default function AmazonAdmin() {
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [pendingItem, setPendingItem] = useState<PoolItem | null>(null);
 
+  useEffect(() => {
+    fetch("/api/admin/amazon/session")
+      .then((response) => response.json())
+      .then((body) => setHasSession(Boolean(body.hasSession)))
+      .catch(() => setHasSession(false));
+  }, []);
+
+  const expireSession = useCallback(() => {
+    setHasSession(false);
+    setShowSessionForm(true);
+    setSessionError("A sessão da Amazon expirou. Cole os cookies novamente.");
+  }, []);
+
+  async function handleSaveSession(event: React.FormEvent) {
+    event.preventDefault();
+    setSavingSession(true);
+    setSessionError(null);
+    try {
+      const response = await fetch("/api/admin/amazon/session", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ curlCommand }),
+      });
+      if (!response.ok) {
+        setSessionError(
+          "Não achei o Cookie nesse curl. Confirma que copiou a requisição products/search inteira e tenta de novo."
+        );
+        return;
+      }
+      setHasSession(true);
+      setShowSessionForm(false);
+      setCurlCommand("");
+    } catch {
+      setSessionError("Não deu para salvar a sessão. Verifique a conexão e tente de novo.");
+    } finally {
+      setSavingSession(false);
+    }
+  }
+
   // Loads the pool already collected for this marketplace — a database
-  // read, no live Amazon request.
+  // read, no live Amazon request, so it doesn't depend on hasSession.
   useEffect(() => {
     fetch("/api/admin/highlights?marketplace=AMAZON")
       .then((response) => response.json())
-      .then((body) => setItems(body.items ?? []))
-      .catch(() => setSearchError("Não deu para carregar as ofertas já coletadas."))
+      .then((body) => {
+        setItems(body.items ?? []);
+        setLoaded(true);
+      })
+      .catch(() => setLoadError("Não deu para carregar as ofertas já coletadas."))
       .finally(() => setLoading(false));
   }, []);
 
-  const runSearch = useCallback(async () => {
-    setSearching(true);
-    setSearchError(null);
+  async function handleLoadMore() {
+    setLoadingMore(true);
+    setLoadError(null);
     try {
-      const params = new URLSearchParams({ q: query, page: "1" });
-      if (searchIndex) params.set("searchIndex", searchIndex);
-      if (sortBy !== "Relevance") params.set("sortBy", sortBy);
-      if (brand) params.set("brand", brand);
-      if (minPrice) params.set("minPrice", String(Math.round(Number(minPrice) * 100)));
-      if (maxPrice) params.set("maxPrice", String(Math.round(Number(maxPrice) * 100)));
-      if (primeOnly) params.set("prime", "true");
-
-      const response = await fetch(`/api/admin/amazon/search?${params.toString()}`);
-      if (response.status === 429) {
-        setSearchError("A Amazon limitou as requisições por agora. Tente de novo em alguns segundos.");
+      const response = await fetch(`/api/admin/amazon/deals?offset=${nextOffset}`);
+      if (response.status === 401) {
+        expireSession();
         return;
       }
       const body = await response.json();
       if (!response.ok) {
-        throw new Error("search_failed");
+        throw new Error("deals_failed");
       }
-      setItems(body.items as PoolItem[]);
-      setSearched(true);
+      const fetchedItems = body.items as PoolItem[];
+      setItems((previous) => {
+        const seenIds = new Set(previous.map((item) => item.id));
+        return [...previous, ...fetchedItems.filter((item) => !seenIds.has(item.id))];
+      });
+      if (body.nextIndex === null) {
+        setNoMorePages(true);
+      } else {
+        setNextOffset(body.nextIndex);
+      }
+      setLoaded(true);
     } catch {
-      setSearchError("A busca falhou. Tente de novo em alguns segundos.");
+      setLoadError("Não deu para carregar mais ofertas. Tente de novo em alguns segundos.");
     } finally {
-      setSearching(false);
+      setLoadingMore(false);
     }
-  }, [query, searchIndex, sortBy, brand, minPrice, maxPrice, primeOnly]);
-
-  async function handleSearch(event: React.FormEvent) {
-    event.preventDefault();
-    await runSearch();
   }
-
-  function handleClearFilters() {
-    setSortBy("Relevance");
-    setSearchIndex("");
-    setBrand("");
-    setMinPrice("");
-    setMaxPrice("");
-    setPrimeOnly(false);
-  }
-
-  // Changing a filter re-runs the search after a short debounce, skipping
-  // the initial mount so opening the page doesn't replace the saved pool.
-  const filtersMounted = useRef(false);
-  useEffect(() => {
-    if (!filtersMounted.current) {
-      filtersMounted.current = true;
-      return;
-    }
-    // SearchItems requires at least one of keywords/brand (among other
-    // alternatives we don't expose) to be non-empty. Without that, an
-    // auto-triggered search would carry only sort/category/price/prime
-    // params, which the API rejects.
-    if (query.trim().length === 0 && brand.trim().length === 0) {
-      return;
-    }
-    const timeoutId = window.setTimeout(() => {
-      void runSearch();
-    }, 400);
-    return () => window.clearTimeout(timeoutId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortBy, searchIndex, brand, minPrice, maxPrice, primeOnly]);
-
-  const filtersActive =
-    sortBy !== "Relevance" || searchIndex !== "" || brand !== "" || minPrice !== "" || maxPrice !== "" || primeOnly;
 
   async function handleSelectForPost(item: PoolItem, imageTitle: string) {
     setSelectingId(item.id);
-    setSearchError(null);
+    setLoadError(null);
     try {
       const response = await fetch("/api/admin/postdraft", {
         method: "POST",
@@ -159,12 +158,12 @@ export default function AmazonAdmin() {
         return;
       }
       if (!response.ok) {
-        setSearchError(`Não deu para selecionar "${item.title}" para postar. Tente de novo.`);
+        setLoadError(`Não deu para selecionar "${item.title}" para postar. Tente de novo.`);
         return;
       }
       setSelectedForPost((previous) => ({ ...previous, [item.id]: true }));
     } catch {
-      setSearchError(`Não deu para selecionar "${item.title}" para postar. Tente de novo.`);
+      setLoadError(`Não deu para selecionar "${item.title}" para postar. Tente de novo.`);
     } finally {
       setSelectingId(null);
     }
@@ -172,7 +171,7 @@ export default function AmazonAdmin() {
 
   async function handleRemove(item: PoolItem) {
     setRemovingId(item.id);
-    setSearchError(null);
+    setLoadError(null);
     try {
       const response = await fetch(`/api/admin/highlights/${item.id}`, { method: "DELETE" });
       if (!response.ok) {
@@ -180,7 +179,7 @@ export default function AmazonAdmin() {
       }
       setItems((previous) => previous.filter((existing) => existing.id !== item.id));
     } catch {
-      setSearchError(`Não deu para remover "${item.title}" da vitrine. Tente de novo.`);
+      setLoadError(`Não deu para remover "${item.title}" da vitrine. Tente de novo.`);
     } finally {
       setRemovingId(null);
     }
@@ -189,12 +188,18 @@ export default function AmazonAdmin() {
   async function handleCopy(id: string, link: string) {
     const succeeded = await copyToClipboard(link);
     if (!succeeded) {
-      setSearchError("O navegador bloqueou a cópia. Selecione o link e copie na mão.");
+      setLoadError("O navegador bloqueou a cópia. Selecione o link e copie na mão.");
       return;
     }
     setCopiedId(id);
     window.setTimeout(() => setCopiedId(null), 2000);
   }
+
+  const sessionFormVisible = hasSession === false || showSessionForm;
+  const trimmedSearchQuery = searchQuery.trim().toLowerCase();
+  const filteredItems = trimmedSearchQuery
+    ? items.filter((item) => item.title.toLowerCase().includes(trimmedSearchQuery))
+    : items;
 
   return (
     <div>
@@ -202,157 +207,160 @@ export default function AmazonAdmin() {
         <div>
           <p className="font-mono text-[11px] tracking-[0.22em] text-ash uppercase">Amazon</p>
           <h1 className="font-display font-stretch-condensed text-3xl leading-none font-black text-paper uppercase italic sm:text-4xl">
-            Hub de <span className="text-gold">afiliados</span>
+            Ofertas do <span className="text-gold">mês</span>
           </h1>
+        </div>
+        <div className="flex items-center gap-2 rounded-full border border-ink-line bg-ink-raised px-3 py-1.5">
+          <StatusDot active={hasSession === true} />
+          <span className="font-mono text-[11px] tracking-wider text-ash uppercase">
+            {hasSession === null ? "verificando" : hasSession ? "sessão ativa" : "sem sessão"}
+          </span>
         </div>
       </div>
 
       <div className="mt-8">
-        <form onSubmit={handleSearch} className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <label htmlFor="amz-query" className="sr-only">
-            O que você procura
+        {sessionFormVisible && (
+          <section className="mb-10 rounded-2xl border border-ink-line bg-ink-raised p-6 sm:p-8">
+            <h2 className="font-display font-stretch-condensed text-xl font-black tracking-tight text-gold uppercase italic">
+              Conectar a sessão da Amazon
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm text-ash">
+              A coleta automática e o botão &quot;Carregar mais&quot; reusam a sua sessão do
+              navegador. Ela costuma durar bastante tempo.
+            </p>
+
+            <ol className="mt-5 max-w-2xl space-y-3 text-sm text-paper/80">
+              {[
+                <>
+                  Abra{" "}
+                  <a
+                    href="https://www.amazon.com.br/events/ofertasmensais"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-gold underline decoration-gold/40 underline-offset-4 hover:decoration-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none"
+                  >
+                    amazon.com.br/events/ofertasmensais
+                  </a>{" "}
+                  logado na sua conta.
+                </>,
+                <>
+                  No DevTools (F12), vá para a aba{" "}
+                  <strong className="font-semibold text-paper">Network</strong> e role a página
+                  pra carregar mais ofertas.
+                </>,
+                <>
+                  Clique com o botão direito na requisição{" "}
+                  <code className="font-mono text-gold">products/search</code>, escolha{" "}
+                  <strong className="font-semibold text-paper">Copy → Copy as cURL</strong>.
+                </>,
+                <>Cole o curl inteiro no campo abaixo — o painel extrai o Cookie sozinho.</>,
+              ].map((step, index) => (
+                <li key={index} className="flex gap-3">
+                  <span className="mt-px shrink-0 font-mono text-xs text-gold tabular-nums">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ol>
+
+            <form onSubmit={handleSaveSession} className="mt-7 space-y-4">
+              <label className="block">
+                <span className="font-mono text-[11px] tracking-[0.18em] text-ash uppercase">
+                  Curl da requisição products/search
+                </span>
+                <textarea
+                  required
+                  value={curlCommand}
+                  onChange={(event) => setCurlCommand(event.target.value)}
+                  placeholder="curl --url 'https://www.amazon.com.br/d2b/api/v1/products/search…"
+                  rows={8}
+                  className="mt-2 w-full resize-y rounded-xl border border-ink-line bg-ink p-3 font-mono text-xs text-paper placeholder:text-ash/60 focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
+                />
+              </label>
+
+              {sessionError && (
+                <p role="alert" className="text-sm text-alert">
+                  {sessionError}
+                </p>
+              )}
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="submit"
+                  disabled={savingSession}
+                  className="rounded-full bg-gold px-6 py-2.5 font-display font-stretch-condensed text-sm font-black tracking-wide text-ink uppercase italic transition hover:bg-paper focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-ink-raised focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {savingSession ? "Salvando…" : "Salvar sessão"}
+                </button>
+                {hasSession && (
+                  <button
+                    type="button"
+                    onClick={() => setShowSessionForm(false)}
+                    className="font-mono text-xs tracking-wider text-ash uppercase transition hover:text-paper focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none"
+                  >
+                    Cancelar
+                  </button>
+                )}
+              </div>
+            </form>
+          </section>
+        )}
+
+        {items.length > 0 && (
+          <label className="block">
+            <span className="sr-only">Buscar nas ofertas já coletadas</span>
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Buscar nas ofertas já coletadas…"
+              className="w-full rounded-full border border-ink-line bg-ink-raised px-5 py-3 text-sm text-paper placeholder:text-ash/70 focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
+            />
           </label>
-          <input
-            id="amz-query"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="fone bluetooth, air fryer, cadeira gamer… (opcional — busca alimenta a vitrine na hora)"
-            className="min-w-0 flex-1 rounded-full border border-ink-line bg-ink-raised px-5 py-3 text-sm text-paper placeholder:text-ash/70 focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
-          />
-          <button
-            type="submit"
-            disabled={searching}
-            className="rounded-full bg-gold px-7 py-3 font-display font-stretch-condensed text-sm font-black tracking-wide text-ink uppercase italic transition hover:bg-paper focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-ink focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {searching ? "Buscando…" : "Buscar produtos"}
-          </button>
-        </form>
+        )}
 
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <label className="sr-only" htmlFor="amz-sort">
-            Ordenar por
-          </label>
-          <select
-            id="amz-sort"
-            value={sortBy}
-            onChange={(event) => setSortBy(event.target.value as SortOption)}
-            className="rounded-full border border-ink-line bg-ink-raised px-4 py-2 font-mono text-xs tracking-wider text-paper uppercase focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
-          >
-            <option value="Relevance">Mais relevantes</option>
-            <option value="Price:LowToHigh">Menor preço</option>
-            <option value="Price:HighToLow">Maior preço</option>
-            <option value="AvgCustomerReviews">Melhor avaliados</option>
-            <option value="NewestArrivals">Mais recentes</option>
-          </select>
-
-          <label className="sr-only" htmlFor="amz-category">
-            Categoria
-          </label>
-          <select
-            id="amz-category"
-            value={searchIndex}
-            onChange={(event) => setSearchIndex(event.target.value)}
-            className="rounded-full border border-ink-line bg-ink-raised px-4 py-2 font-mono text-xs tracking-wider text-paper uppercase focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
-          >
-            {SEARCH_INDEXES.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-
-          <label htmlFor="amz-brand" className="sr-only">
-            Marca
-          </label>
-          <input
-            id="amz-brand"
-            value={brand}
-            onChange={(event) => setBrand(event.target.value)}
-            placeholder="Marca"
-            className="w-32 rounded-full border border-ink-line bg-ink-raised px-4 py-2 font-mono text-xs tracking-wider text-paper placeholder:text-ash/70 focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
-          />
-
-          <label htmlFor="amz-min-price" className="sr-only">
-            Preço mínimo
-          </label>
-          <input
-            id="amz-min-price"
-            type="number"
-            min="0"
-            step="0.01"
-            value={minPrice}
-            onChange={(event) => setMinPrice(event.target.value)}
-            placeholder="Preço mín."
-            className="w-28 rounded-full border border-ink-line bg-ink-raised px-4 py-2 font-mono text-xs tracking-wider text-paper placeholder:text-ash/70 focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
-          />
-
-          <label htmlFor="amz-max-price" className="sr-only">
-            Preço máximo
-          </label>
-          <input
-            id="amz-max-price"
-            type="number"
-            min="0"
-            step="0.01"
-            value={maxPrice}
-            onChange={(event) => setMaxPrice(event.target.value)}
-            placeholder="Preço máx."
-            className="w-28 rounded-full border border-ink-line bg-ink-raised px-4 py-2 font-mono text-xs tracking-wider text-paper placeholder:text-ash/70 focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
-          />
-
-          <button
-            type="button"
-            onClick={() => setPrimeOnly((previous) => !previous)}
-            aria-pressed={primeOnly}
-            className={`rounded-full border px-4 py-2 font-mono text-xs tracking-wider uppercase transition focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none ${
-              primeOnly
-                ? "border-gold bg-gold text-ink"
-                : "border-ink-line bg-ink-raised text-paper hover:border-gold hover:text-gold"
-            }`}
-          >
-            Só Prime
-          </button>
-
-          {filtersActive && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <p aria-live="polite" className="font-mono text-[11px] tracking-[0.2em] text-ash uppercase">
+            {loading
+              ? "carregando…"
+              : filteredItems.length > 0
+                ? `${filteredItems.length} oferta${filteredItems.length === 1 ? "" : "s"}${
+                    trimmedSearchQuery ? " encontrada" + (filteredItems.length === 1 ? "" : "s") : " na vitrine hoje"
+                  }`
+                : ""}
+          </p>
+          {hasSession && !showSessionForm && (
             <button
               type="button"
-              onClick={handleClearFilters}
+              onClick={() => setShowSessionForm(true)}
               className="font-mono text-xs tracking-wider text-ash uppercase transition hover:text-paper focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none"
             >
-              Limpar filtros
+              Trocar sessão
             </button>
           )}
         </div>
 
-        <p aria-live="polite" className="mt-6 font-mono text-[11px] tracking-[0.2em] text-ash uppercase">
-          {loading || searching
-            ? "carregando…"
-            : items.length > 0
-              ? `${items.length} produto${items.length === 1 ? "" : "s"} na vitrine hoje`
-              : ""}
-        </p>
-
-        {searchError && (
+        {loadError && (
           <p
             role="alert"
-            className="mt-4 rounded-xl border border-alert/40 bg-alert/10 px-4 py-3 text-sm text-paper"
+            className="mt-6 rounded-xl border border-alert/40 bg-alert/10 px-4 py-3 text-sm text-paper"
           >
-            {searchError}
+            {loadError}
           </p>
         )}
 
-        {!loading && !searching && searched && items.length === 0 && !searchError && (
+        {loaded && items.length === 0 && !loading && !loadError && (
+          <p className="mt-10 text-sm text-ash">
+            Nenhuma oferta na vitrine ainda. A coleta automática roda a cada 20 minutos.
+          </p>
+        )}
+
+        {loaded && items.length > 0 && filteredItems.length === 0 && !loading && !loadError && (
           <p className="mt-10 text-sm text-ash">Nada encontrado para essa busca. Tente outro termo.</p>
         )}
 
-        {!loading && !searching && !searched && items.length === 0 && !searchError && (
-          <p className="mt-10 text-sm text-ash">
-            Nenhum produto na vitrine ainda. A coleta automática roda a cada 20 minutos.
-          </p>
-        )}
-
         <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map((item, index) => (
+          {filteredItems.map((item, index) => (
             <article
               key={item.id}
               style={{ animationDelay: `${Math.min(index, 11) * 35}ms` }}
@@ -361,9 +369,16 @@ export default function AmazonAdmin() {
               <div className="relative bg-white p-3">
                 {item.image ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={item.image} alt="" loading="lazy" className="mx-auto h-40 w-full object-contain" />
+                  <img
+                    src={item.image}
+                    alt=""
+                    loading="lazy"
+                    className="mx-auto h-40 w-full object-contain"
+                  />
                 ) : (
-                  <div className="flex h-40 items-center justify-center font-mono text-xs text-ash">sem imagem</div>
+                  <div className="flex h-40 items-center justify-center font-mono text-xs text-ash">
+                    sem imagem
+                  </div>
                 )}
                 {item.discount !== null && (
                   <span className="absolute bottom-3 left-3 rounded-md bg-ink px-2 py-0.5 font-display font-stretch-condensed text-xs font-black text-gold italic">
@@ -373,7 +388,9 @@ export default function AmazonAdmin() {
               </div>
 
               <div className="flex flex-1 flex-col gap-3 border-t border-ink/10 p-4">
-                <h2 className="line-clamp-2 text-sm leading-snug font-medium text-ink">{item.title}</h2>
+                <h2 className="line-clamp-2 text-sm leading-snug font-medium text-ink">
+                  {item.title}
+                </h2>
 
                 <div className="flex items-baseline gap-2">
                   <span className="font-display font-stretch-condensed text-2xl leading-none font-black tracking-tight text-ink tabular-nums">
@@ -430,6 +447,19 @@ export default function AmazonAdmin() {
             </article>
           ))}
         </div>
+
+        {hasSession && !noMorePages && (
+          <div className="mt-8 flex justify-center">
+            <button
+              type="button"
+              onClick={handleLoadMore}
+              disabled={loadingMore}
+              className="rounded-full border border-ink-line bg-ink-raised px-7 py-2.5 font-display font-stretch-condensed text-sm font-black tracking-wide text-paper uppercase italic transition hover:border-gold hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-ink focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loadingMore ? "Carregando…" : "Carregar mais"}
+            </button>
+          </div>
+        )}
       </div>
 
       {pendingItem && (

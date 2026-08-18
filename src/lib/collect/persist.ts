@@ -12,29 +12,22 @@ export async function persistItems(
     return { inserted: 0, skipped: items.length };
   }
 
-  for (const item of valid) {
-    await prisma.highlight.upsert({
-      where: { marketplace_productId: { marketplace, productId: item.productId } },
-      create: {
-        marketplace,
-        productId: item.productId,
-        title: item.title,
-        affiliateLink: item.affiliateLink,
-        image: item.image,
-        price: item.price,
-        oldPrice: item.oldPrice,
-        discount: item.discount,
-        note: pickRandomNote(),
-      },
-      update: {
-        price: item.price,
-        oldPrice: item.oldPrice,
-        discount: item.discount,
-      },
-    });
-  }
+  const result = await prisma.highlight.createMany({
+    data: valid.map((item) => ({
+      marketplace,
+      productId: item.productId,
+      title: item.title,
+      affiliateLink: item.affiliateLink,
+      image: item.image,
+      price: item.price,
+      oldPrice: item.oldPrice,
+      discount: item.discount,
+      note: pickRandomNote(),
+    })),
+    skipDuplicates: true,
+  });
 
-  return { inserted: valid.length, skipped: items.length - valid.length };
+  return { inserted: result.count, skipped: items.length - result.count };
 }
 
 export async function findHighlightsByProductIds(
