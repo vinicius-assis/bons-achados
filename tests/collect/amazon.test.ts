@@ -71,7 +71,7 @@ describe("collectAmazon", () => {
 
   it("persists the mapped items under the AMAZON marketplace", async () => {
     vi.mocked(fetchAccessToken).mockResolvedValue("token-abc");
-    vi.mocked(searchItems).mockResolvedValueOnce([buildItem()]).mockResolvedValueOnce([]);
+    vi.mocked(searchItems).mockResolvedValueOnce([buildItem()]);
     vi.mocked(persistItems).mockResolvedValue({ inserted: 1, skipped: 0 });
 
     const result = await collectAmazon();
