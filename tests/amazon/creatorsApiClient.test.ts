@@ -159,6 +159,16 @@ describe("searchItems", () => {
     ]);
   });
 
+  it("omits keywords from the body when the query is empty, since Amazon rejects an empty string", async () => {
+    process.env.AMAZON_AFFILIATE_TAG = "bonsachados0f-20";
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ searchResult: { items: [] } }) } as Response);
+
+    await searchItems("", 1, "token", { searchIndex: "Electronics" });
+
+    const sentBody = JSON.parse(vi.mocked(global.fetch).mock.calls[0][1]!.body as string);
+    expect(sentBody).not.toHaveProperty("keywords");
+  });
+
   it("includes optional filters only when provided", async () => {
     process.env.AMAZON_AFFILIATE_TAG = "bonsachados0f-20";
     global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ searchResult: { items: [] } }) } as Response);

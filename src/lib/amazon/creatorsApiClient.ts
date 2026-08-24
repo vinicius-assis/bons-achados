@@ -150,13 +150,15 @@ export async function searchItems(
 ): Promise<AmazonDealItem[]> {
   const partnerTag = requirePartnerTag();
   const body: Record<string, unknown> = {
-    keywords,
     partnerTag,
     marketplace: MARKETPLACE,
     itemPage: page,
     itemCount: 10,
     resources: ["images.primary.medium", "itemInfo.title", "offersV2.listings.price"],
   };
+  // Amazon rejects an empty-string `keywords` (must match /.*\S.*/) but
+  // accepts the field being omitted entirely.
+  if (keywords.trim()) body.keywords = keywords;
   if (filters.searchIndex) body.searchIndex = filters.searchIndex;
   if (filters.sortBy) body.sortBy = filters.sortBy;
   if (filters.brand) body.brand = filters.brand;
