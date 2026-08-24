@@ -58,19 +58,23 @@ export default function AmazonAdmin() {
 
   // Loads the pool already collected for this marketplace — a database
   // read, no live Amazon request.
-  useEffect(() => {
-    fetch("/api/admin/highlights?marketplace=AMAZON")
+  const loadPool = useCallback(() => {
+    return fetch("/api/admin/highlights?marketplace=AMAZON")
       .then((response) => response.json())
       .then((body) => setItems(body.items ?? []))
-      .catch(() => setSearchError("Não deu para carregar as ofertas já coletadas."))
-      .finally(() => setLoading(false));
+      .catch(() => setSearchError("Não deu para carregar as ofertas já coletadas."));
   }, []);
 
-  const runSearch = useCallback(async () => {
+  useEffect(() => {
+    loadPool().finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const runSearch = useCallback(async (overrideQuery?: string) => {
     setSearching(true);
     setSearchError(null);
     try {
-      const params = new URLSearchParams({ q: query, page: "1" });
+      const params = new URLSearchParams({ q: overrideQuery ?? query, page: "1" });
       if (searchIndex) params.set("searchIndex", searchIndex);
       if (sortBy !== "Relevance") params.set("sortBy", sortBy);
       if (brand) params.set("brand", brand);
@@ -101,13 +105,32 @@ export default function AmazonAdmin() {
     await runSearch();
   }
 
+  // Clears just the query text (the "x" inside the search field), leaving
+  // every other filter as-is.
+  async function handleClearQuery() {
+    setQuery("");
+    if (brand.trim().length > 0) {
+      // Another param still satisfies SearchItems' keywords/brand
+      // requirement, so re-run the search with the query blanked out.
+      await runSearch("");
+      return;
+    }
+    setSearched(false);
+    setSearchError(null);
+    await loadPool();
+  }
+
   function handleClearFilters() {
+    setQuery("");
     setSortBy("Relevance");
     setSearchIndex("");
     setBrand("");
     setMinPrice("");
     setMaxPrice("");
     setPrimeOnly(false);
+    setSearched(false);
+    setSearchError(null);
+    void loadPool();
   }
 
   // Changing a filter re-runs the search after a short debounce, skipping
@@ -133,7 +156,13 @@ export default function AmazonAdmin() {
   }, [sortBy, searchIndex, brand, minPrice, maxPrice, primeOnly]);
 
   const filtersActive =
-    sortBy !== "Relevance" || searchIndex !== "" || brand !== "" || minPrice !== "" || maxPrice !== "" || primeOnly;
+    query !== "" ||
+    sortBy !== "Relevance" ||
+    searchIndex !== "" ||
+    brand !== "" ||
+    minPrice !== "" ||
+    maxPrice !== "" ||
+    primeOnly;
 
   async function handleSelectForPost(item: PoolItem, imageTitle: string) {
     setSelectingId(item.id);
@@ -212,13 +241,25 @@ export default function AmazonAdmin() {
           <label htmlFor="amz-query" className="sr-only">
             O que você procura
           </label>
-          <input
-            id="amz-query"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="fone bluetooth, air fryer, cadeira gamer… (opcional — busca alimenta a vitrine na hora)"
-            className="min-w-0 flex-1 rounded-full border border-ink-line bg-ink-raised px-5 py-3 text-sm text-paper placeholder:text-ash/70 focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
-          />
+          <div className="relative min-w-0 flex-1">
+            <input
+              id="amz-query"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="fone bluetooth, air fryer, cadeira gamer… (opcional — busca alimenta a vitrine na hora)"
+              className="w-full rounded-full border border-ink-line bg-ink-raised px-5 py-3 pr-11 text-sm text-paper placeholder:text-ash/70 focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
+            />
+            {query !== "" && (
+              <button
+                type="button"
+                onClick={handleClearQuery}
+                aria-label="Limpar busca"
+                className="absolute top-1/2 right-3 -translate-y-1/2 text-ash transition hover:text-paper focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none"
+              >
+                ✕
+              </button>
+            )}
+          </div>
           <button
             type="submit"
             disabled={searching}
