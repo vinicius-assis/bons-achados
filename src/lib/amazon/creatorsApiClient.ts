@@ -103,7 +103,7 @@ function parseProduct(product: any): AmazonDealItem | null {
       price,
       oldPrice: typeof rawOldPrice === "number" ? rawOldPrice : null,
       discount: typeof rawDiscount === "number" ? rawDiscount : null,
-      image: product.images?.primary?.medium?.url ?? "",
+      image: product.images?.primary?.large?.url ?? "",
       affiliateLink: detailPageURL,
     };
   } catch {
@@ -154,7 +154,7 @@ export async function searchItems(
     marketplace: MARKETPLACE,
     itemPage: page,
     itemCount: 10,
-    resources: ["images.primary.medium", "itemInfo.title", "offersV2.listings.price"],
+    resources: ["images.primary.large", "itemInfo.title", "offersV2.listings.price"],
   };
   // Amazon rejects an empty-string `keywords` (must match /.*\S.*/) but
   // accepts the field being omitted entirely.

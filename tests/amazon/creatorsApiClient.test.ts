@@ -80,7 +80,7 @@ const SEARCH_RESPONSE = {
         asin: "B0GQWF5JD1",
         detailPageURL: "https://www.amazon.com.br/dp/B0GQWF5JD1?tag=bonsachados0f-20&linkCode=ogi",
         itemInfo: { title: { displayValue: "Apple iPhone 17 de 256 GB" } },
-        images: { primary: { medium: { url: "https://m.media-amazon.com/images/I/abc._SL160_.jpg" } } },
+        images: { primary: { large: { url: "https://m.media-amazon.com/images/I/abc._SL1500_.jpg" } } },
         offersV2: {
           listings: [
             {
@@ -143,7 +143,7 @@ describe("searchItems", () => {
       marketplace: "www.amazon.com.br",
       itemPage: 2,
       itemCount: 10,
-      resources: ["images.primary.medium", "itemInfo.title", "offersV2.listings.price"],
+      resources: ["images.primary.large", "itemInfo.title", "offersV2.listings.price"],
     });
 
     expect(items).toEqual([
@@ -153,7 +153,7 @@ describe("searchItems", () => {
         price: 5887.78,
         oldPrice: 7999.0,
         discount: 26,
-        image: "https://m.media-amazon.com/images/I/abc._SL160_.jpg",
+        image: "https://m.media-amazon.com/images/I/abc._SL1500_.jpg",
         affiliateLink: "https://www.amazon.com.br/dp/B0GQWF5JD1?tag=bonsachados0f-20&linkCode=ogi",
       },
     ]);
