@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { Prisma } from "@prisma/client";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -149,5 +150,21 @@ describe("getPostDraftById", () => {
 
     expect(prisma.postDraft.findUnique).toHaveBeenCalledWith({ where: { id: "cd1" } });
     expect(result).toEqual({ id: "cd1" });
+  });
+
+  it("retries and succeeds when the database connection drops transiently", async () => {
+    vi.mocked(prisma.postDraft.findUnique).mockClear();
+    const connectionError = new Prisma.PrismaClientKnownRequestError("Can't reach database server", {
+      code: "P1001",
+      clientVersion: "6.19.3",
+    });
+    vi.mocked(prisma.postDraft.findUnique)
+      .mockRejectedValueOnce(connectionError)
+      .mockResolvedValueOnce({ id: "cd1" } as never);
+
+    const result = await getPostDraftById("cd1");
+
+    expect(result).toEqual({ id: "cd1" });
+    expect(prisma.postDraft.findUnique).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,5 +1,6 @@
 import type { Marketplace, PostDraft, ProductSource } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { withDbRetry } from "@/lib/dbRetry";
 import { categorize } from "@/lib/postdraft/categorize";
 import { startOfTodayInBrazil } from "@/lib/date";
 
@@ -69,5 +70,5 @@ export async function deleteStalePostDrafts(): Promise<number> {
 }
 
 export async function getPostDraftById(id: string): Promise<PostDraft | null> {
-  return prisma.postDraft.findUnique({ where: { id } });
+  return withDbRetry(() => prisma.postDraft.findUnique({ where: { id } }));
 }
