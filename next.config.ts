@@ -8,7 +8,11 @@ const nextConfig: NextConfig = {
   // follow, so without this the postdraft image routes would 500 in
   // production (works locally because dev/tests share process.cwd()).
   outputFileTracingIncludes: {
-    "/api/admin/postdraft/**": ["assets/**/*"],
+    // sharp's native binaries (including libvips-cpp.so) live in separate
+    // @img/* packages, not under node_modules/sharp itself, so they must be
+    // listed explicitly or the trace omits them and sharp fails to load at
+    // runtime in production (works locally since node_modules is untraced).
+    "/api/admin/postdraft/**": ["assets/**/*", "node_modules/@img/**/*"],
   },
 };
 
