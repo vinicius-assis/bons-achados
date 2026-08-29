@@ -94,6 +94,7 @@ export default function PostarQueue() {
   const [removingItemId, setRemovingItemId] = useState<string | null>(null);
   const [downloadingStories, setDownloadingStories] = useState(false);
   const [downloadingFeeds, setDownloadingFeeds] = useState(false);
+  const [downloadingLote, setDownloadingLote] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -206,6 +207,34 @@ export default function PostarQueue() {
     }
   }
 
+  async function handleDownloadLote() {
+    setDownloadingLote(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/admin/postdraft/lote", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+      if (!response.ok) {
+        throw new Error("lote_failed");
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = `lote-${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      setError("Não deu para gerar o lote. Tente de novo.");
+    } finally {
+      setDownloadingLote(false);
+    }
+  }
+
   async function handleCopyCaption() {
     const succeeded = await copyToClipboard(caption);
     if (!succeeded) {
@@ -301,6 +330,14 @@ export default function PostarQueue() {
             className="rounded-full bg-gold px-4 py-1.5 font-mono text-[10px] tracking-wider text-ink uppercase transition hover:bg-paper focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
           >
             {downloadingFeeds ? "Baixando…" : "Baixar feeds selecionados"}
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadLote}
+            disabled={selectedItems.length === 0 || downloadingLote}
+            className="rounded-full bg-gold px-4 py-1.5 font-mono text-[10px] tracking-wider text-ink uppercase transition hover:bg-paper focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {downloadingLote ? "Gerando…" : "Baixar lote (.zip)"}
           </button>
         </div>
       )}
