@@ -112,11 +112,11 @@ describe("POST /api/admin/postdraft/lote", () => {
     const entries = readZip(new Uint8Array(await response.arrayBuffer()));
     const manifest = JSON.parse(new TextDecoder().decode(entries.get("manifest.json")));
 
-    expect(manifest.versao).toBe(1);
+    expect(manifest.version).toBe(1);
     expect(manifest.stories.map((s: { id: string }) => s.id)).toEqual(["cd2", "cd1"]);
     expect(manifest.stories[0]).toMatchObject({
-      imagem: "001-fone-bluetooth.jpg",
-      texto_sticker: "Shopee",
+      image: "001-fone-bluetooth.jpg",
+      sticker_text: "Shopee",
       link: "https://bonsachados.links/r/1",
     });
     expect(entries.has("001-fone-bluetooth.jpg")).toBe(true);

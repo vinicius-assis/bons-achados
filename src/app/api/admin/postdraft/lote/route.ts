@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
       draft.price,
       draft.imageTitle ?? draft.title
     );
-    entries.push({ name: manifest.stories[index].imagem, data: new Uint8Array(jpeg) });
+    entries.push({ name: manifest.stories[index].image, data: new Uint8Array(jpeg) });
   }
 
   entries.unshift({

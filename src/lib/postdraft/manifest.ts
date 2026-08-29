@@ -21,14 +21,14 @@ export type ManifestDraft = {
 
 export type ManifestStory = {
   id: string;
-  imagem: string;
+  image: string;
   link: string;
-  texto_sticker: string;
+  sticker_text: string;
 };
 
 export type StoryManifest = {
-  versao: 1;
-  gerado_em: string;
+  version: 1;
+  generated_at: string;
   stories: ManifestStory[];
 };
 
@@ -77,9 +77,9 @@ export function buildStoryManifest(drafts: ManifestDraft[], generatedAt: Date): 
     const order = String(position).padStart(pad, "0");
     return {
       id: draft.id,
-      imagem: `${order}-${slugifyTitle(draft.title)}.jpg`,
+      image: `${order}-${slugifyTitle(draft.title)}.jpg`,
       link: draft.affiliateLink,
-      texto_sticker: STICKER_TEXT[draft.marketplace],
+      sticker_text: STICKER_TEXT[draft.marketplace],
     };
   });
 
@@ -88,8 +88,8 @@ export function buildStoryManifest(drafts: ManifestDraft[], generatedAt: Date): 
   }
 
   return {
-    versao: 1,
-    gerado_em: generatedAt.toISOString(),
+    version: 1,
+    generated_at: generatedAt.toISOString(),
     stories,
   };
 }

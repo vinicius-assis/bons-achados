@@ -43,28 +43,28 @@ describe("buildStoryManifest", () => {
       new Date("2026-08-29T14:30:00-03:00")
     );
 
-    expect(manifest.versao).toBe(1);
+    expect(manifest.version).toBe(1);
     // Contract v2 dropped sticker_y_ratio — the script ignores it, so we don't send it.
     expect(manifest).not.toHaveProperty("defaults");
     expect(manifest.stories).toEqual([
       {
         id: "cd1",
-        imagem: "001-tenis-branco.jpg",
+        image: "001-tenis-branco.jpg",
         link: "https://bonsachados.links/r/10482",
-        texto_sticker: "Meli",
+        sticker_text: "Meli",
       },
       {
         id: "cd2",
-        imagem: "002-fone-bluetooth.jpg",
+        image: "002-fone-bluetooth.jpg",
         link: "https://bonsachados.links/r/10482",
-        texto_sticker: "Amazon",
+        sticker_text: "Amazon",
       },
     ]);
   });
 
   it("maps SHOPEE drafts to the Shopee sticker text", () => {
     const manifest = buildStoryManifest([draft({ marketplace: "SHOPEE" })], new Date());
-    expect(manifest.stories[0].texto_sticker).toBe("Shopee");
+    expect(manifest.stories[0].sticker_text).toBe("Shopee");
   });
 
   it("does not emit sticker_y_ratio anywhere", () => {
