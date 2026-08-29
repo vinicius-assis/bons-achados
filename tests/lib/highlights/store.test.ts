@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { Prisma } from "@prisma/client";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -7,6 +8,7 @@ vi.mock("@/lib/prisma", () => ({
       findMany: vi.fn(),
       findUnique: vi.fn(),
       deleteMany: vi.fn(),
+      count: vi.fn(),
     },
   },
 }));
@@ -125,6 +127,7 @@ describe("listHighlightsPage", () => {
     vi.mocked(prisma.highlight.findMany).mockResolvedValue(
       Array.from({ length: 5 }, (_, i) => ({ id: `hl${i}` })) as never
     );
+    vi.mocked(prisma.highlight.count).mockResolvedValue(5 as never);
 
     const result = await listHighlightsPage({
       page: 1,
@@ -140,14 +143,34 @@ describe("listHighlightsPage", () => {
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: 0,
-      take: 31,
+      take: 30,
     });
-    expect(result).toEqual({ items: expect.any(Array), hasNextPage: false });
+    expect(result).toEqual({ items: expect.any(Array), totalPages: 1 });
     expect(result.items).toHaveLength(5);
+  });
+
+  it("counts rows with the same where clause as the page query", async () => {
+    vi.mocked(prisma.highlight.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.highlight.count).mockResolvedValue(0 as never);
+
+    await listHighlightsPage({
+      page: 1,
+      pageSize: 30,
+      marketplaces: ["MERCADO_LIVRE", "AMAZON", "SHOPEE"],
+      q: "",
+    });
+
+    expect(prisma.highlight.count).toHaveBeenCalledWith({
+      where: {
+        createdAt: { gte: new Date("2026-08-03T08:00:00.000Z") },
+        marketplace: { in: ["MERCADO_LIVRE", "AMAZON", "SHOPEE"] },
+      },
+    });
   });
 
   it("adds a case-insensitive title filter when q is given", async () => {
     vi.mocked(prisma.highlight.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.highlight.count).mockResolvedValue(0 as never);
 
     await listHighlightsPage({ page: 1, pageSize: 30, marketplaces: ["AMAZON"], q: "fone" });
 
@@ -164,18 +187,20 @@ describe("listHighlightsPage", () => {
 
   it("skips to the right offset for page 2", async () => {
     vi.mocked(prisma.highlight.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.highlight.count).mockResolvedValue(0 as never);
 
     await listHighlightsPage({ page: 2, pageSize: 30, marketplaces: ["AMAZON"], q: "" });
 
     expect(prisma.highlight.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ skip: 30, take: 31 })
+      expect.objectContaining({ skip: 30, take: 30 })
     );
   });
 
-  it("reports hasNextPage true when one extra row beyond pageSize comes back", async () => {
+  it("derives totalPages by dividing the count by the page size, rounding up", async () => {
     vi.mocked(prisma.highlight.findMany).mockResolvedValue(
-      Array.from({ length: 31 }, (_, i) => ({ id: `hl${i}` })) as never
+      Array.from({ length: 30 }, (_, i) => ({ id: `hl${i}` })) as never
     );
+    vi.mocked(prisma.highlight.count).mockResolvedValue(61 as never);
 
     const result = await listHighlightsPage({
       page: 1,
@@ -184,19 +209,36 @@ describe("listHighlightsPage", () => {
       q: "",
     });
 
-    expect(result.hasNextPage).toBe(true);
-    expect(result.items).toHaveLength(30);
+    expect(result.totalPages).toBe(3);
   });
 
-  it("returns an empty page with no marketplaces selected, without erroring", async () => {
+  it("retries and succeeds when the database connection drops transiently", async () => {
+    vi.useRealTimers();
+    const connectionError = new Prisma.PrismaClientKnownRequestError("Can't reach database server", {
+      code: "P1001",
+      clientVersion: "6.19.3",
+    });
+    vi.mocked(prisma.highlight.findMany)
+      .mockRejectedValueOnce(connectionError)
+      .mockResolvedValueOnce([{ id: "hl1" }] as never);
+    vi.mocked(prisma.highlight.count).mockResolvedValue(1 as never);
+
+    const result = await listHighlightsPage({ page: 1, pageSize: 30, marketplaces: ["AMAZON"], q: "" });
+
+    expect(result.items).toEqual([{ id: "hl1" }]);
+    expect(prisma.highlight.findMany).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns totalPages 1 even when there are no results", async () => {
     vi.mocked(prisma.highlight.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.highlight.count).mockResolvedValue(0 as never);
 
     const result = await listHighlightsPage({ page: 1, pageSize: 30, marketplaces: [], q: "" });
 
     expect(prisma.highlight.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ marketplace: { in: [] } }) })
     );
-    expect(result).toEqual({ items: [], hasNextPage: false });
+    expect(result).toEqual({ items: [], totalPages: 1 });
   });
 });
 

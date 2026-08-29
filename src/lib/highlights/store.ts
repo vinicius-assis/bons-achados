@@ -1,6 +1,7 @@
 import type { Highlight, Marketplace } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { startOfTodayInBrazil } from "@/lib/date";
+import { withDbRetry } from "@/lib/dbRetry";
 
 export type CreateHighlightInput = {
   marketplace: Marketplace;
@@ -46,7 +47,7 @@ export type ListHighlightsPageInput = {
 
 export type ListHighlightsPageResult = {
   items: Highlight[];
-  hasNextPage: boolean;
+  totalPages: number;
 };
 
 export async function listHighlightsPage(
@@ -54,19 +55,25 @@ export async function listHighlightsPage(
 ): Promise<ListHighlightsPageResult> {
   const { page, pageSize, marketplaces, q } = input;
   const trimmedQuery = q.trim();
+  const where = {
+    createdAt: { gte: startOfTodayInBrazil() },
+    marketplace: { in: marketplaces },
+    ...(trimmedQuery ? { title: { contains: trimmedQuery, mode: "insensitive" as const } } : {}),
+  };
 
-  const rows = await prisma.highlight.findMany({
-    where: {
-      createdAt: { gte: startOfTodayInBrazil() },
-      marketplace: { in: marketplaces },
-      ...(trimmedQuery ? { title: { contains: trimmedQuery, mode: "insensitive" as const } } : {}),
-    },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    skip: (page - 1) * pageSize,
-    take: pageSize + 1,
-  });
+  const [items, totalCount] = await withDbRetry(() =>
+    Promise.all([
+      prisma.highlight.findMany({
+        where,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.highlight.count({ where }),
+    ])
+  );
 
-  return { items: rows.slice(0, pageSize), hasNextPage: rows.length > pageSize };
+  return { items, totalPages: Math.max(1, Math.ceil(totalCount / pageSize)) };
 }
 
 export async function removeHighlight(id: string): Promise<void> {

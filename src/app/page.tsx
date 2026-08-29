@@ -3,6 +3,7 @@ import { Archivo } from "next/font/google";
 import Image from "next/image";
 import type { Marketplace } from "@prisma/client";
 import { listHighlightsPage } from "@/lib/highlights/store";
+import { buildPageWindow } from "@/lib/pagination";
 import VitrineHighlights from "./VitrineHighlights";
 import FilterForm from "./FilterForm";
 
@@ -24,6 +25,12 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 30;
+
+const PAGER_LINK_CLASS =
+  "rounded-full border border-ink/15 px-4 py-2 font-mono text-xs tracking-wider text-ink uppercase transition hover:border-ink focus-visible:ring-2 focus-visible:ring-ink/40 focus-visible:outline-none";
+const PAGER_CURRENT_CLASS =
+  "rounded-full border border-ink bg-ink px-4 py-2 font-mono text-xs tracking-wider text-paper uppercase";
+const PAGER_ELLIPSIS_CLASS = "px-2 py-2 font-mono text-xs tracking-wider text-ink/40";
 const ALL_MARKETPLACES: Marketplace[] = ["MERCADO_LIVRE", "AMAZON", "SHOPEE"];
 
 type SearchParams = { [key: string]: string | string[] | undefined };
@@ -67,7 +74,7 @@ export default async function VitrinePage({
   const rawPage = Number(Array.isArray(params.page) ? params.page[0] : params.page);
   const page = Number.isFinite(rawPage) && rawPage > 1 ? Math.floor(rawPage) : 1;
 
-  const { items, hasNextPage } = await listHighlightsPage({ page, pageSize: PAGE_SIZE, marketplaces, q });
+  const { items, totalPages } = await listHighlightsPage({ page, pageSize: PAGE_SIZE, marketplaces, q });
 
   return (
     <div className={`${archivo.variable} flex min-h-screen flex-col bg-paper font-body text-ink`}>
@@ -97,25 +104,62 @@ export default async function VitrinePage({
 
         <VitrineHighlights highlights={items} />
 
-        {(page > 1 || hasNextPage) && (
-          <div className="mt-10 flex items-center justify-center gap-4">
+        {totalPages > 1 && (
+          <nav
+            aria-label="Paginação da vitrine"
+            className="mt-10 flex flex-wrap items-center justify-center gap-2"
+          >
             {page > 1 && (
-              <a
-                href={buildPageHref(page - 1, marketplaces, q, filtered)}
-                className="rounded-full border border-ink/15 px-5 py-2 font-mono text-xs tracking-wider text-ink uppercase transition hover:border-ink focus-visible:ring-2 focus-visible:ring-ink/40 focus-visible:outline-none"
-              >
-                Página anterior
-              </a>
+              <>
+                <a href={buildPageHref(1, marketplaces, q, filtered)} className={PAGER_LINK_CLASS}>
+                  Primeira
+                </a>
+                <a
+                  href={buildPageHref(page - 1, marketplaces, q, filtered)}
+                  className={PAGER_LINK_CLASS}
+                >
+                  ‹ Anterior
+                </a>
+              </>
             )}
-            {hasNextPage && (
-              <a
-                href={buildPageHref(page + 1, marketplaces, q, filtered)}
-                className="rounded-full border border-ink/15 px-5 py-2 font-mono text-xs tracking-wider text-ink uppercase transition hover:border-ink focus-visible:ring-2 focus-visible:ring-ink/40 focus-visible:outline-none"
-              >
-                Próxima página
-              </a>
+
+            {buildPageWindow(page, totalPages).map((item, index) =>
+              item.type === "ellipsis" ? (
+                <span key={`ellipsis-${index}`} aria-hidden="true" className={PAGER_ELLIPSIS_CLASS}>
+                  …
+                </span>
+              ) : item.page === page ? (
+                <span key={item.page} aria-current="page" className={PAGER_CURRENT_CLASS}>
+                  {item.page}
+                </span>
+              ) : (
+                <a
+                  key={item.page}
+                  href={buildPageHref(item.page, marketplaces, q, filtered)}
+                  className={PAGER_LINK_CLASS}
+                >
+                  {item.page}
+                </a>
+              )
             )}
-          </div>
+
+            {page < totalPages && (
+              <>
+                <a
+                  href={buildPageHref(page + 1, marketplaces, q, filtered)}
+                  className={PAGER_LINK_CLASS}
+                >
+                  Próxima ›
+                </a>
+                <a
+                  href={buildPageHref(totalPages, marketplaces, q, filtered)}
+                  className={PAGER_LINK_CLASS}
+                >
+                  Última
+                </a>
+              </>
+            )}
+          </nav>
         )}
       </main>
 
