@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import PostTitleModal from "@/app/admin/PostTitleModal";
 import ScrollToTopButton from "@/components/ScrollToTopButton";
 import HighlightCardSkeleton from "@/components/HighlightCardSkeleton";
+import HubPager from "@/components/HubPager";
 import { ML_HUB_CATEGORIES } from "@/lib/mercadolivre/categories";
 import { copyToClipboard } from "@/lib/clipboard";
 
@@ -52,11 +53,14 @@ export default function MercadoLivreAdmin() {
   const [items, setItems] = useState<PoolItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [searched, setSearched] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
-  const [liveOffset, setLiveOffset] = useState(0);
   const [lastQuery, setLastQuery] = useState("");
+
+  const [poolPage, setPoolPage] = useState(1);
+  const [poolTotalPages, setPoolTotalPages] = useState(1);
+  const [searchPage, setSearchPage] = useState(1);
+  const [searchMaxPage, setSearchMaxPage] = useState(1);
+  const [searchHasNext, setSearchHasNext] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -106,10 +110,14 @@ export default function MercadoLivreAdmin() {
 
   // Loads the pool already collected for this marketplace — a database
   // read, no live ML request, so it doesn't depend on hasSession.
-  const loadPool = useCallback(() => {
-    return fetch("/api/admin/highlights?marketplace=MERCADO_LIVRE")
+  const loadPool = useCallback((page = 1) => {
+    return fetch(`/api/admin/highlights?marketplace=MERCADO_LIVRE&page=${page}`)
       .then((response) => response.json())
-      .then((body) => setItems(body.items ?? []))
+      .then((body) => {
+        setItems(body.items ?? []);
+        setPoolTotalPages(body.totalPages ?? 1);
+        setPoolPage(page);
+      })
       .catch(() => setSearchError("Não deu para carregar os produtos já coletados."));
   }, []);
 
@@ -119,11 +127,11 @@ export default function MercadoLivreAdmin() {
   }, []);
 
   const fetchSearchPage = useCallback(
-    async (term: string, offset: number, mode: "replace" | "append") => {
-      const setLoadingState = mode === "replace" ? setSearching : setLoadingMore;
-      setLoadingState(true);
+    async (term: string, page: number) => {
+      setSearching(true);
       setSearchError(null);
       try {
+        const offset = (page - 1) * PAGE_SIZE;
         const params = new URLSearchParams({ q: term, offset: String(offset), sort });
         if (categoryId) {
           const category = ML_HUB_CATEGORIES.find((candidate) => candidate.id === categoryId);
@@ -147,25 +155,16 @@ export default function MercadoLivreAdmin() {
           throw new Error("search_failed");
         }
         const fetchedItems = body.items as PoolItem[];
-        setItems((previous) => {
-          if (mode === "replace") {
-            return fetchedItems;
-          }
-          const seenIds = new Set(previous.map((item) => item.id));
-          return [...previous, ...fetchedItems.filter((item) => !seenIds.has(item.id))];
-        });
-        setHasMore(body.fetchedCount >= PAGE_SIZE);
-        setLiveOffset(offset + body.fetchedCount);
+        setItems(fetchedItems);
+        setSearchHasNext(body.fetchedCount >= PAGE_SIZE);
+        setSearchPage(page);
+        setSearchMaxPage((previous) => Math.max(previous, page));
         setLastQuery(term);
         setSearched(true);
       } catch {
-        setSearchError(
-          mode === "replace"
-            ? "A busca falhou. Tente de novo em alguns segundos."
-            : "Não deu para carregar mais produtos. Tente de novo em alguns segundos."
-        );
+        setSearchError("A busca falhou. Tente de novo em alguns segundos.");
       } finally {
-        setLoadingState(false);
+        setSearching(false);
       }
     },
     [expireSession, sort, categoryId, filterMode]
@@ -173,11 +172,8 @@ export default function MercadoLivreAdmin() {
 
   async function handleSearch(event: React.FormEvent) {
     event.preventDefault();
-    await fetchSearchPage(query, 0, "replace");
-  }
-
-  async function handleLoadMore() {
-    await fetchSearchPage(lastQuery, liveOffset, "append");
+    setSearchMaxPage(1);
+    await fetchSearchPage(query, 1);
   }
 
   const otherFiltersActive = sort !== "relevance" || categoryId !== "" || filterMode !== "none";
@@ -188,7 +184,8 @@ export default function MercadoLivreAdmin() {
     setQuery("");
     if (otherFiltersActive) {
       // Another param still drives the search, so re-run it with a blank query.
-      await fetchSearchPage("", 0, "replace");
+      setSearchMaxPage(1);
+      await fetchSearchPage("", 1);
       return;
     }
     setSearched(false);
@@ -220,7 +217,8 @@ export default function MercadoLivreAdmin() {
       return;
     }
     const timeoutId = window.setTimeout(() => {
-      void fetchSearchPage(query, 0, "replace");
+      setSearchMaxPage(1);
+      void fetchSearchPage(query, 1);
     }, 400);
     return () => window.clearTimeout(timeoutId);
     // Only filter changes should retrigger this, not `query` or `fetchSearchPage`.
@@ -638,17 +636,19 @@ export default function MercadoLivreAdmin() {
           )}
         </div>
 
-        {hasMore && (
-          <div className="mt-8 flex justify-center">
-            <button
-              type="button"
-              onClick={handleLoadMore}
-              disabled={loadingMore}
-              className="rounded-full border border-ink-line bg-ink-raised px-7 py-2.5 font-display font-stretch-condensed text-sm font-black tracking-wide text-paper uppercase italic transition hover:border-gold hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-ink focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loadingMore ? "Carregando…" : "Carregar mais"}
-            </button>
-          </div>
+        {!loading && (
+          <HubPager
+            currentPage={searched ? searchPage : poolPage}
+            lastKnownPage={searched ? searchMaxPage : poolTotalPages}
+            hasNext={searched ? searchHasNext : poolPage < poolTotalPages}
+            exact={!searched}
+            disabled={searching}
+            onPageChange={(page) => {
+              window.scrollTo({ top: 0, behavior: "smooth" });
+              if (searched) void fetchSearchPage(lastQuery, page);
+              else void loadPool(page);
+            }}
+          />
         )}
       </div>
 

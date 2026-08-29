@@ -3,10 +3,11 @@ import { NextRequest } from "next/server";
 
 vi.mock("@/lib/highlights/store", () => ({
   listTodaysHighlights: vi.fn(),
+  listHighlightsPage: vi.fn(),
 }));
 
 import { GET } from "@/app/api/admin/highlights/route";
-import { listTodaysHighlights } from "@/lib/highlights/store";
+import { listTodaysHighlights, listHighlightsPage } from "@/lib/highlights/store";
 import { ADMIN_SESSION_COOKIE, createSessionToken } from "@/lib/adminSession";
 
 function authHeader() {
@@ -63,5 +64,42 @@ describe("GET /api/admin/highlights", () => {
     );
 
     expect(listTodaysHighlights).toHaveBeenCalledWith(undefined);
+  });
+
+  it("paginates the pool when a page param is given, returning items and totalPages", async () => {
+    vi.mocked(listHighlightsPage).mockResolvedValue({
+      items: [{ id: "hl1" }],
+      totalPages: 4,
+    } as never);
+
+    const response = await GET(
+      new NextRequest("http://localhost/api/admin/highlights?marketplace=AMAZON&page=2", {
+        headers: authHeader(),
+      })
+    );
+    const body = await response.json();
+
+    expect(listTodaysHighlights).not.toHaveBeenCalled();
+    expect(listHighlightsPage).toHaveBeenCalledWith({
+      page: 2,
+      pageSize: 30,
+      marketplaces: ["AMAZON"],
+      q: "",
+    });
+    expect(body).toEqual({ items: [{ id: "hl1" }], totalPages: 4 });
+  });
+
+  it("clamps an invalid page value to 1", async () => {
+    vi.mocked(listHighlightsPage).mockResolvedValue({ items: [], totalPages: 1 } as never);
+
+    await GET(
+      new NextRequest("http://localhost/api/admin/highlights?marketplace=SHOPEE&page=abc", {
+        headers: authHeader(),
+      })
+    );
+
+    expect(listHighlightsPage).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 1 })
+    );
   });
 });

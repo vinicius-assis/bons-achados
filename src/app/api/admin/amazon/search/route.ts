@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
     }));
     await persistItems("AMAZON", mapped);
     const rows = await findHighlightsByProductIds("AMAZON", items.map((item) => item.asin));
-    return NextResponse.json({ items: rows });
+    return NextResponse.json({ items: rows, fetchedCount: items.length });
   } catch (error) {
     if (error instanceof AmazonCreatorsApiError && error.rateLimited) {
       return NextResponse.json({ error: "rate_limited" }, { status: 429 });

@@ -75,7 +75,7 @@ describe("GET /api/admin/amazon/search", () => {
     expect(searchItems).toHaveBeenCalledWith("fone bluetooth", 2, "token-abc", {});
     expect(persistItems).toHaveBeenCalledWith("AMAZON", [expect.objectContaining({ productId: "B01" })]);
     expect(findHighlightsByProductIds).toHaveBeenCalledWith("AMAZON", ["B01"]);
-    expect(body).toEqual({ items: [highlightRow] });
+    expect(body).toEqual({ items: [highlightRow], fetchedCount: 1 });
   });
 
   it("defaults page to 1 when missing", async () => {

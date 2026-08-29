@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import PostTitleModal from "@/app/admin/PostTitleModal";
 import ScrollToTopButton from "@/components/ScrollToTopButton";
 import HighlightCardSkeleton from "@/components/HighlightCardSkeleton";
+import HubPager from "@/components/HubPager";
 import { copyToClipboard } from "@/lib/clipboard";
 
 type SortOption = "Relevance" | "Price:LowToHigh" | "Price:HighToLow" | "AvgCustomerReviews" | "NewestArrivals";
@@ -36,6 +37,9 @@ function formatPrice(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+// Amazon's PA-API returns 10 items per page and no total count.
+const PAGE_SIZE = 10;
+
 export default function AmazonAdmin() {
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("Relevance");
@@ -51,6 +55,13 @@ export default function AmazonAdmin() {
   const [searched, setSearched] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
+  const [poolPage, setPoolPage] = useState(1);
+  const [poolTotalPages, setPoolTotalPages] = useState(1);
+  const [searchPage, setSearchPage] = useState(1);
+  const [searchMaxPage, setSearchMaxPage] = useState(1);
+  const [searchHasNext, setSearchHasNext] = useState(false);
+  const [lastQuery, setLastQuery] = useState("");
+
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectingId, setSelectingId] = useState<string | null>(null);
   const [selectedForPost, setSelectedForPost] = useState<Record<string, boolean>>({});
@@ -59,10 +70,14 @@ export default function AmazonAdmin() {
 
   // Loads the pool already collected for this marketplace — a database
   // read, no live Amazon request.
-  const loadPool = useCallback(() => {
-    return fetch("/api/admin/highlights?marketplace=AMAZON")
+  const loadPool = useCallback((page = 1) => {
+    return fetch(`/api/admin/highlights?marketplace=AMAZON&page=${page}`)
       .then((response) => response.json())
-      .then((body) => setItems(body.items ?? []))
+      .then((body) => {
+        setItems(body.items ?? []);
+        setPoolTotalPages(body.totalPages ?? 1);
+        setPoolPage(page);
+      })
       .catch(() => setSearchError("Não deu para carregar as ofertas já coletadas."));
   }, []);
 
@@ -71,11 +86,12 @@ export default function AmazonAdmin() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const runSearch = useCallback(async (overrideQuery?: string) => {
+  const runSearch = useCallback(async (overrideQuery?: string, page = 1) => {
     setSearching(true);
     setSearchError(null);
     try {
-      const params = new URLSearchParams({ q: overrideQuery ?? query, page: "1" });
+      const term = overrideQuery ?? query;
+      const params = new URLSearchParams({ q: term, page: String(page) });
       if (searchIndex) params.set("searchIndex", searchIndex);
       if (sortBy !== "Relevance") params.set("sortBy", sortBy);
       if (brand) params.set("brand", brand);
@@ -93,6 +109,10 @@ export default function AmazonAdmin() {
         throw new Error("search_failed");
       }
       setItems(body.items as PoolItem[]);
+      setSearchHasNext((body.fetchedCount ?? 0) >= PAGE_SIZE);
+      setSearchPage(page);
+      setSearchMaxPage((previous) => Math.max(previous, page));
+      setLastQuery(term);
       setSearched(true);
     } catch {
       setSearchError("A busca falhou. Tente de novo em alguns segundos.");
@@ -103,6 +123,7 @@ export default function AmazonAdmin() {
 
   async function handleSearch(event: React.FormEvent) {
     event.preventDefault();
+    setSearchMaxPage(1);
     await runSearch();
   }
 
@@ -113,6 +134,7 @@ export default function AmazonAdmin() {
     if (brand.trim().length > 0) {
       // Another param still satisfies SearchItems' keywords/brand
       // requirement, so re-run the search with the query blanked out.
+      setSearchMaxPage(1);
       await runSearch("");
       return;
     }
@@ -150,6 +172,7 @@ export default function AmazonAdmin() {
       return;
     }
     const timeoutId = window.setTimeout(() => {
+      setSearchMaxPage(1);
       void runSearch();
     }, 400);
     return () => window.clearTimeout(timeoutId);
@@ -476,6 +499,21 @@ export default function AmazonAdmin() {
             ))
           )}
         </div>
+
+        {!loading && (
+          <HubPager
+            currentPage={searched ? searchPage : poolPage}
+            lastKnownPage={searched ? searchMaxPage : poolTotalPages}
+            hasNext={searched ? searchHasNext : poolPage < poolTotalPages}
+            exact={!searched}
+            disabled={searching}
+            onPageChange={(page) => {
+              window.scrollTo({ top: 0, behavior: "smooth" });
+              if (searched) void runSearch(lastQuery, page);
+              else void loadPool(page);
+            }}
+          />
+        )}
       </div>
 
       {pendingItem && (

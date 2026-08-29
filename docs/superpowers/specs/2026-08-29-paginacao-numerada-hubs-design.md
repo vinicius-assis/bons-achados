@@ -154,9 +154,14 @@ O modo (`pool` vs `search`) continua derivado do estado `searched`
 `PAGE_SIZE` permanece `18`.
 
 **`loadPool(page = 1)`:** passa `&page=${page}` na URL, lê
-`body.totalPages`, faz `setPoolTotalPages` e `setPoolPage(page)`. Se
-`body.items` vier vazio e `page > 1` (itens removidos enquanto
-navegava), faz clamp: `loadPool(Math.max(1, totalPages))`.
+`body.totalPages`, faz `setPoolTotalPages` e `setPoolPage(page)`.
+Mantém o estilo `.then()` do código atual (não `async/await` — a regra
+`react-hooks/set-state-in-effect` do lint rejeita `setState` alcançável
+de dentro de uma função `async` chamada no corpo de um `useEffect`).
+Sem auto-clamp quando a página volta vazia: `poolTotalPages` é
+atualizado a cada carga, então o pager reflete a realidade na próxima
+navegação; uma página que ficou órfã só mostra grid vazio até o
+próximo clique.
 
 **`fetchSearchPage(term, page)`:** a assinatura troca de
 `(term, offset, mode)` para `(term, page)` — o parâmetro `mode` e todo
@@ -192,8 +197,7 @@ No lugar, no fim do `<div className="mt-8">`:
 ```
 
 `handleRemove` continua filtrando o estado local sem refetch (mesmo
-comportamento de hoje); o clamp em `loadPool` cobre o caso de a página
-esvaziar na próxima navegação.
+comportamento de hoje).
 
 ### 5. `ShopeeAdmin` — `src/app/admin/shopee/ShopeeAdmin.tsx`
 
@@ -205,7 +209,7 @@ Mesma reestruturação do ML. Diferenças:
 - `PAGE_SIZE` efetivo é 20 (o `limit` do GraphQL) — não há constante no
   cliente hoje; não precisa criar, `hasNextPage` já resolve.
 - Remover `loadingMore`, `handleLoadMore`, o `mode: "append"`.
-- `loadPool(page)` idêntico ao do ML (com `page=` e clamp).
+- `loadPool(page)` idêntico ao do ML (com `page=`, sem clamp).
 
 ### 6. `AmazonAdmin` — `src/app/admin/amazon/AmazonAdmin.tsx`
 
@@ -218,24 +222,26 @@ Mesma reestruturação do ML. Diferenças:
   `setSearchMaxPage(prev => Math.max(prev, page))`.
 - `handleSearch`, `handleClearQuery` (ramo `brand`), o `useEffect` de
   debounce: chamam `runSearch(q, 1)` e resetam `searchMaxPage` para 1.
-- `loadPool(page)` idêntico aos outros (com `page=` e clamp).
+- `loadPool(page)` idêntico aos outros (com `page=`, sem clamp).
 - `<HubPager>` no fim do `<div className="mt-8">`, mesmo formato do ML,
   com `onPageChange` chamando `runSearch(query, page)` ou
   `loadPool(page)`.
 
 ## Testes
 
-- **`tests/components/HubPager.test.tsx`** (novo):
-  - modo exato: com `lastKnownPage=13`, `currentPage=2` → renderiza
-    "Primeira", "‹ Anterior", números via `buildPageWindow`, "Próxima ›",
-    "Última"; a página 2 não é um botão clicável.
-  - modo exato, `currentPage=1`: sem "Primeira"/"‹ Anterior".
-  - modo exato, `currentPage === lastKnownPage`, `hasNext=false`: sem
-    "Próxima ›"/"Última".
-  - modo janela (`exact=false`): sem "Primeira"/"Última";
-    `hasNext=true` mostra "Próxima ›"; `hasNext=false` esconde.
-  - `disabled=true`: nenhum `onPageChange` disparado ao clicar.
-  - clique num número chama `onPageChange` com o número certo.
+- **`tests/components/HubPager.test.tsx`** (novo): usa
+  `renderToStaticMarkup` de `react-dom/server` (o ambiente de teste é
+  `node`, sem jsdom/testing-library) e inspeciona o HTML gerado.
+  - uma página só, sem próxima → `return ""` (não renderiza nada).
+  - modo exato, `currentPage=2`, `lastKnownPage=13`, `hasNext` →
+    "Primeira", "‹ Anterior", "Próxima ›", "Última" presentes;
+    `aria-current="page"` na página atual.
+  - modo exato, `currentPage=1`: sem "Primeira"/"Anterior".
+  - modo exato, última página, `hasNext=false`: sem "Próxima ›"/"Última".
+  - modo janela (`exact=false`): nunca "Primeira"/"Última";
+    `hasNext=true` mostra "Próxima ›", `hasNext=false` esconde.
+  - `disabled=true`: todo `<button>` do HTML carrega o atributo
+    `disabled`.
 - **`tests/api/admin/highlights.test.ts`** (atualizar/criar):
   - `?marketplace=AMAZON&page=1` → resposta tem `totalPages` numérico.
   - `?marketplace=AMAZON` (sem `page`) → resposta inalterada, sem
