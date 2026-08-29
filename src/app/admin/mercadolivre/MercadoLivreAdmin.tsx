@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import PostTitleModal from "@/app/admin/PostTitleModal";
 import ScrollToTopButton from "@/components/ScrollToTopButton";
+import HighlightCardSkeleton from "@/components/HighlightCardSkeleton";
 import { ML_HUB_CATEGORIES } from "@/lib/mercadolivre/categories";
 import { copyToClipboard } from "@/lib/clipboard";
 
@@ -506,7 +507,10 @@ export default function MercadoLivreAdmin() {
         )}
 
         <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map((item, index) => (
+          {loading || searching ? (
+            Array.from({ length: 6 }).map((_, index) => <HighlightCardSkeleton key={index} />)
+          ) : (
+            items.map((item, index) => (
             <article
               key={item.id}
               style={{ animationDelay: `${Math.min(index, 11) * 35}ms` }}
@@ -591,7 +595,8 @@ export default function MercadoLivreAdmin() {
                 </div>
               </div>
             </article>
-          ))}
+            ))
+          )}
         </div>
 
         {hasMore && (
