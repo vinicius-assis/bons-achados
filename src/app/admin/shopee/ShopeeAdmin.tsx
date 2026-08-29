@@ -44,14 +44,16 @@ export default function ShopeeAdmin() {
 
   // Loads the pool already collected for this marketplace — a database
   // read, no live Shopee API call.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLoading(true);
-    fetch("/api/admin/highlights?marketplace=SHOPEE")
+  const loadPool = useCallback(() => {
+    return fetch("/api/admin/highlights?marketplace=SHOPEE")
       .then((response) => response.json())
       .then((body) => setItems(body.items ?? []))
-      .catch(() => setSearchError("Não deu para carregar os produtos já coletados."))
-      .finally(() => setLoading(false));
+      .catch(() => setSearchError("Não deu para carregar os produtos já coletados."));
+  }, []);
+
+  useEffect(() => {
+    loadPool().finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchSearchPage = useCallback(async (term: string, targetPage: number, mode: "replace" | "append") => {
@@ -103,9 +105,29 @@ export default function ShopeeAdmin() {
     await fetchSearchPage(lastQuery, page + 1, "append");
   }
 
-  function handleClearFilters() {
+  const otherFiltersActive = categoryId !== "" || exclusive;
+
+  // Clears just the query text (the "x" inside the search field), leaving every
+  // other filter as-is.
+  async function handleClearQuery() {
+    setQuery("");
+    if (otherFiltersActive) {
+      // Another param still drives the search, so re-run it with a blank query.
+      await fetchSearchPage("", 1, "replace");
+      return;
+    }
+    setSearched(false);
+    setSearchError(null);
+    await loadPool();
+  }
+
+  async function handleClearFilters() {
+    setQuery("");
     setCategoryId("");
     setExclusive(false);
+    setSearched(false);
+    setSearchError(null);
+    await loadPool();
   }
 
   // Changing a filter re-runs the search after a short debounce, skipping
@@ -116,6 +138,11 @@ export default function ShopeeAdmin() {
       filtersMounted.current = true;
       return;
     }
+    // With nothing left to search on, an auto-triggered search would just wipe
+    // the pool — let "Limpar filtros" fall back to the DB pool instead.
+    if (query.trim().length === 0 && categoryId === "" && !exclusive) {
+      return;
+    }
     const timeoutId = window.setTimeout(() => {
       void fetchSearchPage(query, 1, "replace");
     }, 400);
@@ -124,7 +151,7 @@ export default function ShopeeAdmin() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryId, exclusive]);
 
-  const filtersActive = categoryId !== "" || exclusive;
+  const filtersActive = query !== "" || otherFiltersActive;
 
   async function handleSelectForPost(item: PoolItem, imageTitle: string) {
     setSelectingId(item.id);
@@ -201,13 +228,25 @@ export default function ShopeeAdmin() {
           <label htmlFor="shopee-query" className="sr-only">
             O que você procura
           </label>
-          <input
-            id="shopee-query"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="fone bluetooth, air fryer, cadeira gamer… (opcional — busca alimenta a vitrine na hora)"
-            className="min-w-0 flex-1 rounded-full border border-ink-line bg-ink-raised px-5 py-3 text-sm text-paper placeholder:text-ash/70 focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
-          />
+          <div className="relative min-w-0 flex-1">
+            <input
+              id="shopee-query"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="fone bluetooth, air fryer, cadeira gamer… (opcional — busca alimenta a vitrine na hora)"
+              className="w-full rounded-full border border-ink-line bg-ink-raised px-5 py-3 pr-11 text-sm text-paper placeholder:text-ash/70 focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
+            />
+            {query !== "" && (
+              <button
+                type="button"
+                onClick={handleClearQuery}
+                aria-label="Limpar busca"
+                className="absolute top-1/2 right-3 -translate-y-1/2 text-ash transition hover:text-paper focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none"
+              >
+                ✕
+              </button>
+            )}
+          </div>
           <button
             type="submit"
             disabled={searching}

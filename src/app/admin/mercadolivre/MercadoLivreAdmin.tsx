@@ -106,14 +106,16 @@ export default function MercadoLivreAdmin() {
 
   // Loads the pool already collected for this marketplace — a database
   // read, no live ML request, so it doesn't depend on hasSession.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLoading(true);
-    fetch("/api/admin/highlights?marketplace=MERCADO_LIVRE")
+  const loadPool = useCallback(() => {
+    return fetch("/api/admin/highlights?marketplace=MERCADO_LIVRE")
       .then((response) => response.json())
       .then((body) => setItems(body.items ?? []))
-      .catch(() => setSearchError("Não deu para carregar os produtos já coletados."))
-      .finally(() => setLoading(false));
+      .catch(() => setSearchError("Não deu para carregar os produtos já coletados."));
+  }, []);
+
+  useEffect(() => {
+    loadPool().finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchSearchPage = useCallback(
@@ -178,10 +180,30 @@ export default function MercadoLivreAdmin() {
     await fetchSearchPage(lastQuery, liveOffset, "append");
   }
 
-  function handleClearFilters() {
+  const otherFiltersActive = sort !== "relevance" || categoryId !== "" || filterMode !== "none";
+
+  // Clears just the query text (the "x" inside the search field), leaving every
+  // other filter as-is.
+  async function handleClearQuery() {
+    setQuery("");
+    if (otherFiltersActive) {
+      // Another param still drives the search, so re-run it with a blank query.
+      await fetchSearchPage("", 0, "replace");
+      return;
+    }
+    setSearched(false);
+    setSearchError(null);
+    await loadPool();
+  }
+
+  async function handleClearFilters() {
+    setQuery("");
     setSort("relevance");
     setCategoryId("");
     setFilterMode("none");
+    setSearched(false);
+    setSearchError(null);
+    await loadPool();
   }
 
   // Changing a filter re-runs the search after a short debounce, skipping
@@ -192,6 +214,11 @@ export default function MercadoLivreAdmin() {
       filtersMounted.current = true;
       return;
     }
+    // With nothing left to search on, an auto-triggered search would just wipe
+    // the pool — let "Limpar filtros" fall back to the DB pool instead.
+    if (query.trim().length === 0 && categoryId === "" && filterMode === "none") {
+      return;
+    }
     const timeoutId = window.setTimeout(() => {
       void fetchSearchPage(query, 0, "replace");
     }, 400);
@@ -200,7 +227,7 @@ export default function MercadoLivreAdmin() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sort, categoryId, filterMode]);
 
-  const filtersActive = sort !== "relevance" || categoryId !== "" || filterMode !== "none";
+  const filtersActive = query !== "" || otherFiltersActive;
 
   async function handleSelectForPost(item: PoolItem, imageTitle: string) {
     setSelectingId(item.id);
@@ -380,13 +407,25 @@ export default function MercadoLivreAdmin() {
             <label htmlFor="ml-query" className="sr-only">
               O que você procura
             </label>
-            <input
-              id="ml-query"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="fone bluetooth, air fryer, cadeira gamer… (opcional — busca alimenta a vitrine na hora)"
-              className="min-w-0 flex-1 rounded-full border border-ink-line bg-ink-raised px-5 py-3 text-sm text-paper placeholder:text-ash/70 focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
-            />
+            <div className="relative min-w-0 flex-1">
+              <input
+                id="ml-query"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="fone bluetooth, air fryer, cadeira gamer… (opcional — busca alimenta a vitrine na hora)"
+                className="w-full rounded-full border border-ink-line bg-ink-raised px-5 py-3 pr-11 text-sm text-paper placeholder:text-ash/70 focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
+              />
+              {query !== "" && (
+                <button
+                  type="button"
+                  onClick={handleClearQuery}
+                  aria-label="Limpar busca"
+                  className="absolute top-1/2 right-3 -translate-y-1/2 text-ash transition hover:text-paper focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
             <button
               type="submit"
               disabled={searching}
