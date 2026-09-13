@@ -89,6 +89,7 @@ export default function PostarQueue() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
+  const [cleaningStale, setCleaningStale] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
   const [removingItemId, setRemovingItemId] = useState<string | null>(null);
@@ -135,6 +136,22 @@ export default function PostarQueue() {
       setError("Não deu para limpar a lista. Tente de novo.");
     } finally {
       setClearing(false);
+    }
+  }
+
+  async function handleCleanStale() {
+    setCleaningStale(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/admin/postdraft/clean-stale", { method: "POST" });
+      if (!response.ok) {
+        throw new Error("clean_stale_failed");
+      }
+      await load();
+    } catch {
+      setError("Não deu para limpar os itens de dias anteriores. Tente de novo.");
+    } finally {
+      setCleaningStale(false);
     }
   }
 
@@ -279,6 +296,14 @@ export default function PostarQueue() {
             className="rounded-full border border-ink-line bg-ink-raised px-6 py-2.5 font-display font-stretch-condensed text-sm font-black tracking-wide text-paper uppercase italic transition hover:border-gold hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
           >
             Embaralhar
+          </button>
+          <button
+            type="button"
+            onClick={handleCleanStale}
+            disabled={cleaningStale || items.length === 0}
+            className="rounded-full border border-ink-line bg-ink-raised px-6 py-2.5 font-display font-stretch-condensed text-sm font-black tracking-wide text-paper uppercase italic transition hover:border-alert hover:text-alert focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {cleaningStale ? "Limpando…" : "Limpar itens de dias anteriores"}
           </button>
           <button
             type="button"
