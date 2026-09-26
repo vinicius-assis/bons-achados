@@ -50,9 +50,11 @@ describe("GET /api/admin/amazon/search", () => {
   beforeEach(() => {
     process.env.ADMIN_USER = "admin";
     process.env.ADMIN_PASSWORD = "test-password";
+    process.env.AMAZON_SOURCE = "creators";
   });
   afterEach(() => {
     vi.clearAllMocks();
+    delete process.env.AMAZON_SOURCE;
     delete process.env.ADMIN_USER;
     delete process.env.ADMIN_PASSWORD;
   });
@@ -145,5 +147,21 @@ describe("GET /api/admin/amazon/search", () => {
     const response = await GET(buildRequest({ q: "fone" }));
 
     expect(response.status).toBe(502);
+  });
+});
+
+describe("GET /api/admin/amazon/search (web source)", () => {
+  beforeEach(() => {
+    process.env.ADMIN_USER = "admin";
+    process.env.ADMIN_PASSWORD = "test-password";
+    delete process.env.AMAZON_SOURCE;
+  });
+
+  it("returns 501 search_unavailable without calling the Creators API", async () => {
+    const response = await GET(buildRequest({ q: "fone" }));
+
+    expect(response.status).toBe(501);
+    expect(await response.json()).toEqual({ error: "search_unavailable" });
+    expect(fetchAccessToken).not.toHaveBeenCalled();
   });
 });

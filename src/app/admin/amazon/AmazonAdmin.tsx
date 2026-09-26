@@ -22,6 +22,10 @@ const SEARCH_INDEXES = [
   { value: "VideoGames", label: "Games" },
 ];
 
+function StatusDot({ active }: { active: boolean }) {
+  return <span aria-hidden="true" className={`size-2 rounded-full ${active ? "bg-gold" : "bg-alert"}`} />;
+}
+
 type PoolItem = {
   id: string;
   productId: string;
@@ -48,6 +52,12 @@ export default function AmazonAdmin() {
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [primeOnly, setPrimeOnly] = useState(false);
+
+  const [hasSession, setHasSession] = useState<boolean | null>(null);
+  const [showSessionForm, setShowSessionForm] = useState(false);
+  const [curlCommand, setCurlCommand] = useState("");
+  const [savingSession, setSavingSession] = useState(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
   const [items, setItems] = useState<PoolItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,6 +92,41 @@ export default function AmazonAdmin() {
   }, []);
 
   useEffect(() => {
+    fetch("/api/admin/amazon/session")
+      .then((response) => response.json())
+      .then((body) => setHasSession(Boolean(body.hasSession)))
+      .catch(() => setHasSession(false));
+  }, []);
+
+  async function handleSaveSession(event: React.FormEvent) {
+    event.preventDefault();
+    setSavingSession(true);
+    setSessionError(null);
+    try {
+      const response = await fetch("/api/admin/amazon/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ curlCommand }),
+      });
+      if (response.status === 400) {
+        setSessionError("Não achei o Cookie nesse curl. Confirma que copiou a requisição inteira e tenta de novo.");
+        return;
+      }
+      if (!response.ok) {
+        setSessionError("Não deu para salvar a sessão. Tente de novo em alguns segundos.");
+        return;
+      }
+      setHasSession(true);
+      setShowSessionForm(false);
+      setCurlCommand("");
+    } catch {
+      setSessionError("Não deu para salvar a sessão. Verifique a conexão e tente de novo.");
+    } finally {
+      setSavingSession(false);
+    }
+  }
+
+  useEffect(() => {
     loadPool().finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -102,6 +147,10 @@ export default function AmazonAdmin() {
       const response = await fetch(`/api/admin/amazon/search?${params.toString()}`);
       if (response.status === 429) {
         setSearchError("A Amazon limitou as requisições por agora. Tente de novo em alguns segundos.");
+        return;
+      }
+      if (response.status === 501) {
+        setSearchError("A busca por palavra-chave não está disponível enquanto a coleta usa a sessão web da Amazon.");
         return;
       }
       const body = await response.json();
@@ -258,9 +307,75 @@ export default function AmazonAdmin() {
             Hub de <span className="text-gold">afiliados</span>
           </h1>
         </div>
+        <button
+          type="button"
+          onClick={() => setShowSessionForm((visible) => !visible)}
+          className="flex items-center gap-2 rounded-full border border-ink-line bg-ink-raised px-3 py-1.5 focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none"
+        >
+          <StatusDot active={hasSession === true} />
+          <span className="font-mono text-[11px] tracking-wider text-ash uppercase">
+            {hasSession === null ? "verificando" : hasSession ? "sessão ativa" : "sem sessão"}
+          </span>
+        </button>
       </div>
 
       <div className="mt-8">
+        {(hasSession === false || showSessionForm) && (
+          <section className="mb-10 rounded-2xl border border-ink-line bg-ink-raised p-6 sm:p-8">
+            <h2 className="font-display font-stretch-condensed text-xl font-black tracking-tight text-gold uppercase italic">
+              Conectar a sessão da Amazon
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm text-ash">
+              A coleta automática lê as ofertas usando a sua sessão logada do navegador. Quando ela expirar, cole de novo.
+            </p>
+            <ol className="mt-5 max-w-2xl space-y-3 text-sm text-paper/80">
+              <li>
+                01 — Abra{" "}
+                <a
+                  href="https://www.amazon.com.br/deals"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-gold underline decoration-gold/40 underline-offset-4 hover:decoration-gold"
+                >
+                  amazon.com.br/deals
+                </a>{" "}
+                logado na sua conta.
+              </li>
+              <li>
+                02 — No DevTools (F12), aba <strong className="font-semibold text-paper">Network</strong>, recarregue a página e
+                ache a requisição <code className="font-mono text-gold">products/search</code>.
+              </li>
+              <li>
+                03 — Botão direito, <strong className="font-semibold text-paper">Copy → Copy as cURL</strong>, e cole abaixo. O painel
+                extrai só o Cookie.
+              </li>
+            </ol>
+            <form onSubmit={handleSaveSession} className="mt-7 space-y-4">
+              <textarea
+                required
+                value={curlCommand}
+                onChange={(event) => setCurlCommand(event.target.value)}
+                placeholder="curl --url 'https://www.amazon.com.br/d2b/api/v1/products/search…"
+                rows={8}
+                aria-label="Curl da requisição products/search"
+                className="w-full resize-y rounded-xl border border-ink-line bg-ink p-3 font-mono text-xs text-paper placeholder:text-ash/60 focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none"
+              />
+              {sessionError && (
+                <p role="alert" className="text-sm text-alert">
+                  {sessionError}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={savingSession}
+                className="rounded-full bg-gold px-6 py-2.5 font-display font-stretch-condensed text-sm font-black tracking-wide text-ink uppercase italic transition hover:bg-paper focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingSession ? "Salvando…" : "Salvar sessão"}
+              </button>
+            </form>
+          </section>
+        )}
+
         <form onSubmit={handleSearch} className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <label htmlFor="amz-query" className="sr-only">
             O que você procura

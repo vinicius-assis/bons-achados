@@ -26,6 +26,12 @@ model MercadoLivreSession {
   updatedAt    DateTime @updatedAt
 }
 
+model AmazonWebSession {
+  id           Int      @id @default(1)
+  cookieHeader String
+  updatedAt    DateTime @updatedAt
+}
+
 model PostDraft {
   id            String        @id @default(cuid())
   marketplace   Marketplace

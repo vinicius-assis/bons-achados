@@ -1,4 +1,7 @@
 import { fetchAccessToken, searchItems, getItems, AmazonCreatorsApiError, type AmazonDealItem } from "@/lib/amazon/creatorsApiClient";
+import { fetchDealsPage, AmazonWebSessionError } from "@/lib/amazon/dealsWebClient";
+import { getAmazonWebCookie } from "@/lib/amazon/session";
+import { getAmazonSource } from "@/lib/amazon/source";
 import { persistItems } from "@/lib/collect/persist";
 import { pickRandomSearchTerm } from "@/lib/collect/searchTerms";
 import { prisma } from "@/lib/prisma";
@@ -32,6 +35,11 @@ function mapAmazonItems(items: AmazonDealItem[]): CollectItem[] {
 }
 
 export async function refreshAmazonPrices(): Promise<{ refreshed: number; error?: string }> {
+  // The deals feed has no "get by ASIN" lookup, so price refresh is Creators-only.
+  if (getAmazonSource() === "web") {
+    return { refreshed: 0 };
+  }
+
   let staleRows: { id: string; productId: string }[];
   try {
     staleRows = await prisma.highlight.findMany({
@@ -106,7 +114,44 @@ export async function refreshAmazonPrices(): Promise<{ refreshed: number; error?
   return batchError ? { refreshed, error: batchError } : { refreshed };
 }
 
+async function collectAmazonWeb(): Promise<CollectResult> {
+  try {
+    const cookie = await getAmazonWebCookie();
+    if (!cookie) {
+      return { attempted: 0, inserted: 0, skipped: 0, error: "session_expired" };
+    }
+
+    const fetched: AmazonDealItem[] = [];
+    let startIndex = 0;
+    for (let page = 0; page < MAX_PAGES && fetched.length < TARGET_ITEM_COUNT; page++) {
+      const { items: pageItems, nextIndex } = await fetchDealsPage(startIndex, cookie);
+      fetched.push(...pageItems);
+      if (nextIndex === null) {
+        break;
+      }
+      startIndex = nextIndex;
+    }
+    const items = fetched.slice(0, TARGET_ITEM_COUNT);
+    if (items.length === 0) {
+      return { attempted: 0, inserted: 0, skipped: 0 };
+    }
+    const { inserted, skipped } = await persistItems("AMAZON", mapAmazonItems(items));
+    return { attempted: items.length, inserted, skipped };
+  } catch (error) {
+    if (error instanceof AmazonWebSessionError) {
+      console.error("collectAmazon: Amazon web session expired:", error);
+      return { attempted: 0, inserted: 0, skipped: 0, error: "session_expired" };
+    }
+    console.error("collectAmazon (web) failed:", error);
+    return { attempted: 0, inserted: 0, skipped: 0, error: "collect_failed" };
+  }
+}
+
 export async function collectAmazon(): Promise<CollectResult> {
+  if (getAmazonSource() === "web") {
+    return collectAmazonWeb();
+  }
+
   const searchTerm = pickRandomSearchTerm();
   let discoveryResult: CollectResult;
 

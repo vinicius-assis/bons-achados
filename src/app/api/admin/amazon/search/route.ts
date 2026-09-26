@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchAccessToken, searchItems, AmazonCreatorsApiError, type AmazonSearchFilters } from "@/lib/amazon/creatorsApiClient";
+import { getAmazonSource } from "@/lib/amazon/source";
 import { persistItems, findHighlightsByProductIds } from "@/lib/collect/persist";
 import { isAuthorizedAdminRequest } from "@/lib/adminSession";
 
@@ -33,6 +34,11 @@ function parseFilters(searchParams: URLSearchParams): AmazonSearchFilters {
 export async function GET(request: NextRequest) {
   if (!isAuthorizedAdminRequest(request)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  // Keyword search only exists in the Creators API; the deals feed can't do it.
+  if (getAmazonSource() === "web") {
+    return NextResponse.json({ error: "search_unavailable" }, { status: 501 });
   }
 
   const query = request.nextUrl.searchParams.get("q") ?? "";

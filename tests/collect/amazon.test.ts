@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("@/lib/amazon/creatorsApiClient", () => ({
   fetchAccessToken: vi.fn(),
@@ -12,6 +12,11 @@ vi.mock("@/lib/amazon/creatorsApiClient", () => ({
     }
   },
 }));
+vi.mock("@/lib/amazon/dealsWebClient", () => ({
+  fetchDealsPage: vi.fn(),
+  AmazonWebSessionError: class AmazonWebSessionError extends Error {},
+}));
+vi.mock("@/lib/amazon/session", () => ({ getAmazonWebCookie: vi.fn() }));
 vi.mock("@/lib/collect/persist", () => ({ persistItems: vi.fn() }));
 vi.mock("@/lib/collect/searchTerms", () => ({ pickRandomSearchTerm: vi.fn().mockReturnValue("eletrônicos") }));
 vi.mock("@/lib/prisma", () => ({
@@ -19,6 +24,8 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 import { fetchAccessToken, searchItems, getItems, AmazonCreatorsApiError, type AmazonDealItem } from "@/lib/amazon/creatorsApiClient";
+import { fetchDealsPage, AmazonWebSessionError } from "@/lib/amazon/dealsWebClient";
+import { getAmazonWebCookie } from "@/lib/amazon/session";
 import { persistItems } from "@/lib/collect/persist";
 import { collectAmazon, refreshAmazonPrices } from "@/lib/collect/amazon";
 import { prisma } from "@/lib/prisma";
@@ -37,8 +44,12 @@ function buildItem(overrides: Partial<AmazonDealItem> = {}): AmazonDealItem {
 }
 
 describe("collectAmazon", () => {
+  beforeEach(() => {
+    process.env.AMAZON_SOURCE = "creators";
+  });
   afterEach(() => {
     vi.clearAllMocks();
+    delete process.env.AMAZON_SOURCE;
   });
 
   it("fetches a token, then pages searchItems until it has 50 items", async () => {
@@ -152,8 +163,12 @@ describe("collectAmazon", () => {
 });
 
 describe("refreshAmazonPrices", () => {
+  beforeEach(() => {
+    process.env.AMAZON_SOURCE = "creators";
+  });
   afterEach(() => {
     vi.clearAllMocks();
+    delete process.env.AMAZON_SOURCE;
   });
 
   it("does nothing and doesn't call fetchAccessToken when there are no stale items", async () => {
@@ -303,5 +318,73 @@ describe("refreshAmazonPrices", () => {
 
     expect(fetchAccessToken).not.toHaveBeenCalled();
     expect(result).toEqual({ refreshed: 0, error: "collect_failed" });
+  });
+});
+
+describe("collectAmazon (web source, the default)", () => {
+  beforeEach(() => {
+    vi.mocked(getAmazonWebCookie).mockResolvedValue("session-id=abc");
+  });
+  afterEach(() => {
+    vi.clearAllMocks();
+    delete process.env.AMAZON_SOURCE;
+  });
+
+  it("pages the deals feed via nextIndex and persists under AMAZON without touching the Creators API", async () => {
+    vi.mocked(fetchDealsPage)
+      .mockResolvedValueOnce({ items: Array.from({ length: 30 }, (_, i) => buildItem({ asin: `A${i}` })), nextIndex: 30 })
+      .mockResolvedValueOnce({ items: Array.from({ length: 30 }, (_, i) => buildItem({ asin: `B${i}` })), nextIndex: 60 });
+    vi.mocked(persistItems).mockResolvedValue({ inserted: 50, skipped: 0 });
+
+    const result = await collectAmazon();
+
+    expect(fetchDealsPage).toHaveBeenNthCalledWith(1, 0, "session-id=abc");
+    expect(fetchDealsPage).toHaveBeenNthCalledWith(2, 30, "session-id=abc");
+    expect(fetchAccessToken).not.toHaveBeenCalled();
+    expect(persistItems).toHaveBeenCalledWith("AMAZON", expect.any(Array));
+    expect(vi.mocked(persistItems).mock.calls[0][1]).toHaveLength(50);
+    expect(result).toEqual({ attempted: 50, inserted: 50, skipped: 0 });
+  });
+
+  it("stops when the feed has no next page", async () => {
+    vi.mocked(fetchDealsPage).mockResolvedValueOnce({ items: [buildItem()], nextIndex: null });
+    vi.mocked(persistItems).mockResolvedValue({ inserted: 1, skipped: 0 });
+
+    await collectAmazon();
+
+    expect(fetchDealsPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns session_expired without throwing when the cookie is rejected", async () => {
+    vi.mocked(fetchDealsPage).mockRejectedValue(new AmazonWebSessionError("expired"));
+
+    const result = await collectAmazon();
+
+    expect(result).toEqual({ attempted: 0, inserted: 0, skipped: 0, error: "session_expired" });
+  });
+
+  it("returns session_expired without calling the feed when no cookie is saved", async () => {
+    vi.mocked(getAmazonWebCookie).mockResolvedValue(null);
+
+    const result = await collectAmazon();
+
+    expect(fetchDealsPage).not.toHaveBeenCalled();
+    expect(result.error).toBe("session_expired");
+  });
+
+  it("returns collect_failed on any other error", async () => {
+    vi.mocked(fetchDealsPage).mockRejectedValue(new Error("boom"));
+
+    const result = await collectAmazon();
+
+    expect(result.error).toBe("collect_failed");
+  });
+
+  it("does not attempt a price refresh (no Creators API in web mode)", async () => {
+    vi.mocked(fetchDealsPage).mockResolvedValue({ items: [], nextIndex: null });
+
+    await collectAmazon();
+
+    expect(prisma.highlight.findMany).not.toHaveBeenCalled();
   });
 });

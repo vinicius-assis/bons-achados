@@ -3,7 +3,7 @@ export type ParsedCurlSession = {
   csrfToken: string;
 };
 
-function extractCookieHeader(curlCommand: string): string | undefined {
+export function extractCookieHeader(curlCommand: string): string | undefined {
   const match =
     curlCommand.match(/(?:^|\s)(?:-b|--cookie)\s+'([^']*)'/) ??
     curlCommand.match(/(?:^|\s)(?:-b|--cookie)\s+"([^"]*)"/) ??
