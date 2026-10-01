@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import ScrollToTopButton from "@/components/ScrollToTopButton";
 import { copyToClipboard } from "@/lib/clipboard";
+import { buildBatchZip } from "@/lib/postdraft/batchZip";
+import { ManifestValidationError } from "@/lib/postdraft/manifest";
 import { buildCaption, type CaptionProduct } from "@/lib/postdraft/caption";
 
 type PostDraftItem = {
@@ -96,6 +98,7 @@ export default function PostarQueue() {
   const [downloadingStories, setDownloadingStories] = useState(false);
   const [downloadingFeeds, setDownloadingFeeds] = useState(false);
   const [downloadingLote, setDownloadingLote] = useState(false);
+  const [loteProgress, setLoteProgress] = useState<{ done: number; total: number } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -226,18 +229,22 @@ export default function PostarQueue() {
 
   async function handleDownloadLote() {
     setDownloadingLote(true);
+    setLoteProgress(null);
     setError(null);
     try {
-      const response = await fetch("/api/admin/postdraft/lote", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ids: selectedIds }),
-      });
-      if (!response.ok) {
-        throw new Error("lote_failed");
-      }
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
+      const zip = await buildBatchZip(
+        selectedItems,
+        async (id) => {
+          const response = await fetch(`/api/admin/postdraft/${id}/story`);
+          if (!response.ok) {
+            throw new Error(`story_failed:${id}:${response.status}`);
+          }
+          return new Uint8Array(await response.arrayBuffer());
+        },
+        new Date(),
+        { onProgress: (done, total) => setLoteProgress({ done, total }) }
+      );
+      const objectUrl = URL.createObjectURL(new Blob([zip as BlobPart], { type: "application/zip" }));
       const link = document.createElement("a");
       link.href = objectUrl;
       link.download = `lote-${new Date().toISOString().slice(0, 10)}.zip`;
@@ -245,10 +252,16 @@ export default function PostarQueue() {
       link.click();
       link.remove();
       URL.revokeObjectURL(objectUrl);
-    } catch {
-      setError("Não deu para gerar o lote. Tente de novo.");
+    } catch (caught) {
+      if (caught instanceof ManifestValidationError) {
+        setError(`Lote inválido: ${caught.detalhes.join("; ")}`);
+      } else {
+        const reason = caught instanceof Error ? caught.message : "erro desconhecido";
+        setError(`Não deu para gerar o lote (${reason}). Tente de novo.`);
+      }
     } finally {
       setDownloadingLote(false);
+      setLoteProgress(null);
     }
   }
 
@@ -360,9 +373,11 @@ export default function PostarQueue() {
             type="button"
             onClick={handleDownloadLote}
             disabled={selectedItems.length === 0 || downloadingLote}
-            className="rounded-full bg-gold px-4 py-1.5 font-mono text-[10px] tracking-wider text-ink uppercase transition hover:bg-paper focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex-1 rounded-full bg-gold px-4 py-1.5 font-mono text-[10px] tracking-wider text-ink uppercase transition hover:bg-paper focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {downloadingLote ? "Gerando…" : "Baixar lote (.zip)"}
+            {downloadingLote
+              ? `Gerando… ${loteProgress ? `${loteProgress.done}/${loteProgress.total}` : ""}`
+              : "Baixar lote (.zip)"}
           </button>
         </div>
       )}
